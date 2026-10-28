@@ -1,0 +1,2959 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>人生</title>
+<style>
+/* Layout: the globe fills a pure-black screen; title and transport float top/bottom-left, the itinerary docks right (a bottom sheet on phones). */
+:root {
+  --bg: #000;
+  --ink: #f3f2ee;
+  --ink-2: rgba(243, 242, 238, .64);
+  --ink-3: rgba(243, 242, 238, .54);
+  --ink-4: rgba(243, 242, 238, .16);
+  --hair: rgba(255, 255, 255, .085);
+  --panel: rgba(8, 8, 9, .74);
+  --field: rgba(255, 255, 255, .045);
+  --danger: #ff8a7a;
+  --f-display: "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif;
+  --f-body: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  --f-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --panel-w: 372px;
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-weight: 300;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+:focus-visible { outline: 1px solid var(--ink-2); outline-offset: 3px; border-radius: 4px; }
+::selection { background: rgba(255, 255, 255, .24); color: #fff; }
+input, textarea { caret-color: var(--ink); }
+#globe:focus-visible { outline: none; }
+
+#globe { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#globe.dragging { cursor: grabbing; }
+#globe.picking { cursor: crosshair; }
+#globe.hovering { cursor: pointer; }
+
+/* Title block */
+.brand {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 28px);
+  left: max(28px, calc(env(safe-area-inset-left, 0px) + 16px));
+  pointer-events: none;
+  display: grid;
+  gap: 10px;
+  max-width: 420px;
+}
+.brand h1 {
+  margin: 0;
+  font-family: var(--f-display);
+  font-weight: 300;
+  font-size: 34px;
+  letter-spacing: .18em;
+  line-height: 1.1;
+}
+.stats {
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-variant-numeric: tabular-nums;
+}
+.stats b { color: var(--ink); font-weight: 400; }
+
+/* Transport controls */
+.dock {
+  position: fixed;
+  left: max(28px, calc(env(safe-area-inset-left, 0px) + 16px));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--hair);
+  border-radius: 17px;
+  background: rgba(0, 0, 0, .5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  letter-spacing: .04em;
+  transition: color .2s, border-color .2s, background .2s;
+}
+.chip:hover { color: var(--ink); border-color: var(--ink-4); }
+.chip[aria-pressed="true"] { color: var(--ink); border-color: rgba(255, 255, 255, .28); }
+.chip svg { width: 13px; height: 13px; flex: none; }
+.chip.primary { color: var(--ink); border-color: rgba(255, 255, 255, .22); }
+
+/* Tooltip */
+.tip {
+  position: fixed;
+  left: 0; top: 0;
+  pointer-events: none;
+  padding: 9px 12px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: rgba(6, 6, 7, .86);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: grid;
+  gap: 3px;
+  max-width: 240px;
+  z-index: 5;
+}
+.tip .t-name { font-size: 13px; font-weight: 400; }
+.tip .t-when { font-family: var(--f-mono); font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* Itinerary panel */
+.panel {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  right: max(16px, calc(env(safe-area-inset-right, 0px) + 16px));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  width: var(--panel-w);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  background: var(--panel);
+  backdrop-filter: blur(18px) saturate(110%);
+  -webkit-backdrop-filter: blur(18px) saturate(110%);
+  overflow: hidden;
+  z-index: 3;
+}
+.p-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 14px 20px;
+  border-bottom: 1px solid var(--hair);
+}
+.p-title { display: flex; align-items: baseline; gap: 10px; }
+.p-title h2 { margin: 0; font-family: var(--f-display); font-weight: 500; font-size: 15px; letter-spacing: .2em; }
+.p-title span { font-family: var(--f-mono); font-size: 11px; color: var(--ink-3); }
+.p-toggle { display: none; }
+/* desktop: the list can slide away; a small 足迹 tab brings it back */
+.panel-tab { display: none; }
+@media (min-width: 761px) {
+  .p-toggle { display: inline-flex; }
+  .panel { transition: transform .45s cubic-bezier(.2, .8, .2, 1), opacity .3s ease; }
+  body.panel-hidden .panel { transform: translateX(calc(100% + 24px)); opacity: 0; pointer-events: none; }
+  .panel-tab {
+    position: fixed; z-index: 3;
+    top: calc(env(safe-area-inset-top, 0px) + 16px); right: max(16px, calc(env(safe-area-inset-right, 0px) + 16px));
+    gap: 8px; opacity: 0; pointer-events: none; transition: opacity .3s ease .15s;
+  }
+  body.panel-hidden .panel-tab { display: inline-flex; opacity: 1; pointer-events: auto; }
+  .panel-tab .tab-count { color: var(--ink-3); font-family: var(--f-mono); font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) { .panel, .panel-tab { transition: none !important; } }
+.p-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--ink-4) transparent; }
+
+.p-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px 10px 20px;
+  border-top: 1px solid var(--hair);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.p-foot-btns { display: flex; gap: 2px; flex: none; }
+#foot-status.warn { color: var(--ink); }
+.icon-btn.em { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--ink-3); }
+.banner {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--hair);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  display: grid;
+  gap: 10px;
+}
+.banner-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.empty { padding: 36px 24px; display: grid; gap: 12px; color: var(--ink-2); font-size: 13px; line-height: 1.7; }
+.empty strong { font-family: var(--f-display); font-weight: 500; color: var(--ink); font-size: 16px; letter-spacing: .1em; }
+
+.stops { list-style: none; margin: 0; padding: 10px 0 18px; position: relative; }
+.stop { --d: 0; --indent: 22px; position: relative; display: grid; grid-template-columns: 1fr auto; align-items: start; }
+.stop-main {
+  display: grid;
+  grid-template-columns: calc(34px + var(--d) * var(--indent)) 1fr;
+  gap: 4px;
+  text-align: left;
+  padding: 12px 8px 12px 24px;
+  min-width: 0;
+}
+.stop-rail { position: relative; }
+.stop-rail .dot { position: absolute; top: 5px; left: calc(17px + var(--d) * var(--indent)); translate: -50% 0; }
+/* tree guides: each row draws its piece of every vertical line that passes through it */
+.guide { position: absolute; top: 0; bottom: 0; left: calc(41px + var(--l) * var(--indent)); width: 1px; background: var(--ink-4); pointer-events: none; }
+.guide.up { bottom: auto; height: 20px; }
+.guide.down { top: 21px; }
+.stop-tog {
+  position: absolute; z-index: 1; top: 10px; left: calc(17px + var(--d) * var(--indent));
+  width: 18px; height: 22px; display: grid; place-items: center;
+  color: var(--ink-3); border-radius: 4px; transition: color .15s, background .15s;
+}
+.stop-tog:hover { color: var(--ink); background: rgba(255, 255, 255, .06); }
+.stop-tog svg { transform: rotate(90deg); transition: transform .2s cubic-bezier(.2, .8, .2, 1); }
+.stop-tog[aria-expanded="false"] svg { transform: none; }
+.dot {
+  position: relative;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 0 0 3px var(--bg), 0 0 10px rgba(255, 255, 255, .7);
+}
+.stop.trip .dot { width: 5px; height: 5px; margin-top: 1px; background: var(--bg); border: 1px solid var(--ink-2); box-shadow: 0 0 0 3px var(--bg); }
+.stop.trip .stop-place { font-size: 15.5px; }
+.stop.now .dot::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .5);
+  animation: ring 2.4s ease-out infinite;
+}
+@keyframes ring { from { transform: scale(.5); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+.stop-body { display: grid; gap: 4px; min-width: 0; }
+.stop-when { font-family: var(--f-mono); font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.stop-when em { font-style: normal; color: var(--ink-3); }
+.stop-place { font-family: var(--f-display); font-size: 19px; font-weight: 500; letter-spacing: .06em; line-height: 1.3; overflow-wrap: anywhere; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tag.warn { color: var(--danger); border-color: rgba(255, 138, 122, .45); cursor: help; }
+.tag { font-family: var(--f-mono); font-size: 11px; font-weight: 400; letter-spacing: .08em; line-height: 1.4; color: var(--ink-3); border: 1px solid var(--ink-4); border-radius: 3px; padding: 0 5px; cursor: default; }
+.stop-meta { font-family: var(--f-mono); font-size: 11px; color: var(--ink-3); overflow-wrap: anywhere; }
+.stop-note { font-size: 12.5px; color: var(--ink-2); line-height: 1.6; overflow-wrap: anywhere; }
+.stop-main:hover .stop-place, .stop.sel .stop-place { color: #fff; text-shadow: 0 0 18px rgba(255, 255, 255, .45); }
+.stop.sel { background: linear-gradient(90deg, rgba(255, 255, 255, .05), transparent 80%); }
+.stop-actions { display: flex; flex-direction: column; padding: 6px 8px 0 0; }
+.icon-btn { display: inline-flex; align-items: center; justify-content: flex-end; min-height: 32px; min-width: 40px; padding: 0 8px; font-size: 12px; color: var(--ink-3); border-radius: 6px; white-space: nowrap; transition: color .15s, background .15s; }
+.icon-btn:hover { background: rgba(255, 255, 255, .05); }
+.icon-btn:hover { color: var(--ink); }
+.icon-btn.danger { color: var(--danger); }
+
+/* Form */
+.form { padding: 18px 20px 22px; display: grid; gap: 16px; }
+.form h3 { margin: 0; font-family: var(--f-display); font-weight: 500; font-size: 15px; letter-spacing: .14em; }
+.field { display: grid; gap: 7px; position: relative; }
+.field label, .field .lbl { font-size: 12px; color: var(--ink-2); letter-spacing: .08em; }
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--field);
+  font-size: 13.5px;
+  outline: none;
+  transition: border-color .2s;
+}
+textarea.input { height: auto; min-height: 64px; padding: 10px 12px; resize: vertical; line-height: 1.6; }
+.input:focus { border-color: rgba(255, 255, 255, .32); }
+.input.mono { font-family: var(--f-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.input[aria-invalid="true"] { border-color: var(--danger); }
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 30px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a3a29e' stroke-width='1.2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+select.input option { background: #0b0b0c; color: var(--ink); }
+.lbl-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.help { font-size: 11.5px; color: var(--ink-3); }
+.help.role { color: var(--ink-2); }
+.vias { display: flex; flex-wrap: wrap; gap: 6px; }
+.vias:empty { display: none; }
+.via-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 8px; border-radius: 999px;
+  border: 1px solid var(--ink-4); font-size: 12.5px; color: var(--ink);
+}
+.via-sep { font-style: normal; color: var(--ink-3); align-self: center; }
+.via-chip { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.via-chip:focus-visible { outline: 1.5px solid rgba(255, 255, 255, .8); outline-offset: 2px; }
+.via-chip.is-dragging { opacity: .3; }
+.via-chip.drop-before { box-shadow: -5px 0 0 -3px var(--ink); }
+.via-chip.drop-after { box-shadow: 5px 0 0 -3px var(--ink); }
+.via-ghost {
+  position: fixed; z-index: 50; pointer-events: none; cursor: grabbing;
+  background: var(--panel); box-shadow: 0 8px 24px rgba(0, 0, 0, .5); transform: rotate(-2deg);
+}
+.via-help { font-size: 11.5px; color: var(--ink-3); }
+.via-chip button { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: var(--ink-3); }
+.via-chip button:hover { color: var(--ink); background: rgba(255, 255, 255, .08); }
+.role-warn { display: block; margin-top: 4px; color: var(--danger); }
+.help:empty, .field-err:empty { display: none; }
+.field-err { font-size: 12px; color: var(--danger); }
+.suggest li.nomatch { color: var(--ink-2); flex-wrap: wrap; }
+.suggest li.nomatch span { color: var(--ink); }
+.input:disabled { opacity: .4; }
+.input::placeholder { color: var(--ink-3); }
+.suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  margin: 0; padding: 4px;
+  list-style: none;
+  border: 1px solid var(--hair);
+  border-radius: 9px;
+  background: #0b0b0c;
+  z-index: 4;
+  max-height: 248px;
+  overflow-y: auto;
+}
+.suggest li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+.suggest li span { color: var(--ink-3); font-size: 11.5px; }
+.suggest li.on, .suggest li:hover { background: rgba(255, 255, 255, .07); }
+.loc { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.loc-val { font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.loc-val.missing { color: var(--ink-3); }
+.link-btn { font-size: 12px; color: var(--ink); border: 1px solid var(--hair); border-radius: 14px; padding: 4px 11px; }
+.link-btn[aria-pressed="true"] { border-color: rgba(255, 255, 255, .4); background: rgba(255, 255, 255, .06); }
+.check { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 2px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.check input { accent-color: #fff; margin: 0; width: 15px; height: 15px; }
+.actions { display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
+.btn.quiet-danger { margin-right: auto; padding: 0 4px; border-color: transparent; color: var(--ink-3); }
+.btn.quiet-danger:hover { color: var(--danger); }
+.btn { height: 36px; padding: 0 18px; border-radius: 18px; font-size: 13px; border: 1px solid var(--hair); color: var(--ink-2); }
+.btn:hover { color: var(--ink); }
+.btn.solid { background: var(--ink); color: #000; border-color: var(--ink); font-weight: 400; }
+.btn.solid:hover { background: #fff; }
+.btn.solid:disabled { opacity: .5; cursor: progress; }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 22px);
+  transform: translate(-50%, -8px);
+  padding: 9px 16px;
+  border: 1px solid var(--hair);
+  border-radius: 18px;
+  background: rgba(10, 10, 11, .9);
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .3s, transform .3s, visibility 0s .3s;
+  z-index: 9;
+  max-width: calc(100vw - 48px);
+}
+.toast.on { opacity: 1; visibility: visible; pointer-events: auto; transform: translate(-50%, 0); transition: opacity .3s, transform .3s; }
+.toast button { font-size: 12.5px; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--ink-3); min-height: 28px; }
+
+@media (max-width: 760px) {
+  .brand { top: calc(env(safe-area-inset-top, 0px) + 18px); left: max(18px, calc(env(safe-area-inset-left, 0px) + 16px)); gap: 6px; }
+  .brand h1 { font-size: 24px; }
+  .stats { font-size: 10.5px; gap: 4px 12px; }
+  .panel {
+    top: auto;
+    left: max(10px, env(safe-area-inset-left, 0px));
+    right: max(10px, env(safe-area-inset-right, 0px));
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+    width: auto;
+    height: 46%;
+    transition: height .35s ease;
+  }
+  .panel.collapsed { height: 58px; }
+  .panel.collapsed .p-foot { display: none; }
+  .p-head { padding: 12px 14px 12px 18px; }
+  .p-toggle { display: inline-flex; }
+  .dock { left: max(18px, calc(env(safe-area-inset-left, 0px) + 16px)); bottom: calc(46% + env(safe-area-inset-bottom, 0px) + 22px); transition: bottom .35s ease; }
+  body.sheet-collapsed .dock { bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); }
+  .chip { height: 32px; padding: 0 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stop.now .dot::after { animation: none; }
+  .toast, .panel, .dock { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="globe" tabindex="0" role="img" data-t-aria="globeLabel"></canvas>
+
+<header class="brand">
+  <h1 data-t="title">人生</h1>
+  <div class="stats" id="stats"></div>
+</header>
+
+<nav class="dock" data-t-aria="dockLabel">
+  <button class="chip" id="btn-spin" type="button" aria-pressed="true">
+    <svg viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="7" cy="7" r="5.6"/><ellipse cx="7" cy="7" rx="2.4" ry="5.6"/><path d="M1.4 7h11.2"/></svg>
+    <span data-t="spin">自转</span>
+  </button>
+  <button class="chip" id="btn-light" type="button" aria-pressed="false">
+    <svg viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2.5 4.2 6 2.4l5.5 1.8v6.9L8 12.2 2.5 10.6z"/><path d="M4.4 4.6 6.6 4l3.2 1.1v4.2l-2.2.7-3.2-.9z" fill="currentColor" stroke="none"/></svg>
+    <span data-t="light">点亮</span>
+  </button>
+  <button class="chip" id="btn-lang" type="button"></button>
+</nav>
+
+<button class="chip panel-tab" id="btn-panel" type="button" aria-controls="panel" aria-expanded="false">
+  <svg viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M9 3L5 7l4 4"/></svg>
+  <span data-t="panelTitle">足迹</span><span class="tab-count" id="tab-count"></span>
+</button>
+<aside class="panel" id="panel" data-t-aria="panelLabel">
+  <div class="p-head">
+    <div class="p-title"><h2 data-t="panelTitle">足迹</h2><span id="count"></span></div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="chip primary" id="btn-add" type="button" hidden>
+        <svg viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M7 2v10M2 7h10"/></svg>
+        <span data-t="add">添加地点</span>
+      </button>
+      <button class="chip p-toggle" id="btn-sheet" type="button" aria-expanded="true" data-t-aria="collapseList">
+        <svg viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3"><path id="sheet-icon" d="M3 5l4 4 4-4"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="p-body" id="p-body"></div>
+  <div class="p-foot">
+    <span id="foot-status">数据只保存在这个浏览器里</span>
+    <span class="p-foot-btns">
+      <button type="button" class="icon-btn" id="btn-export" data-t="export">导出</button>
+      <button type="button" class="icon-btn" id="btn-import" data-t="import">导入</button>
+      <input type="file" id="f-import" accept="application/json,.json" hidden>
+    </span>
+  </div>
+</aside>
+
+<div class="tip" id="tip" hidden><div class="t-name" id="t-name"></div><div class="t-when" id="t-when"></div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>__D3_ARRAY__</script>
+<script>__D3_GEO__</script>
+<script>__TOPOJSON__</script>
+<script>
+const WORLD50 = __WORLD50__;
+const PROVINCES = __PROVINCES__;
+const WORLD_PLACES = __WORLD_PLACES__;
+const REGIONS = __REGIONS__;
+const WORLD110 = __WORLD110__;
+</script>
+<script>
+(() => {
+"use strict";
+
+/* ---------- Gazetteer: 中文名|English|国家/地区|纬度|经度 ---------- */
+const GAZ = `
+北京|Beijing|中国|39.904|116.407
+上海|Shanghai|中国|31.230|121.474
+广州|Guangzhou|中国|23.129|113.264
+深圳|Shenzhen|中国|22.543|114.058
+天津|Tianjin|中国|39.343|117.362
+重庆|Chongqing|中国|29.563|106.551
+成都|Chengdu|中国|30.573|104.066
+杭州|Hangzhou|中国|30.274|120.155
+南京|Nanjing|中国|32.060|118.797
+武汉|Wuhan|中国|30.593|114.305
+西安|Xi'an|中国|34.342|108.940
+苏州|Suzhou|中国|31.299|120.585
+长沙|Changsha|中国|28.228|112.939
+郑州|Zhengzhou|中国|34.747|113.625
+青岛|Qingdao|中国|36.067|120.383
+大连|Dalian|中国|38.914|121.615
+沈阳|Shenyang|中国|41.806|123.432
+哈尔滨|Harbin|中国|45.803|126.535
+长春|Changchun|中国|43.817|125.324
+济南|Jinan|中国|36.651|117.120
+厦门|Xiamen|中国|24.480|118.089
+福州|Fuzhou|中国|26.075|119.296
+合肥|Hefei|中国|31.821|117.227
+南昌|Nanchang|中国|28.683|115.858
+昆明|Kunming|中国|25.039|102.718
+大理|Dali|中国|25.607|100.268
+丽江|Lijiang|中国|26.872|100.229
+贵阳|Guiyang|中国|26.647|106.630
+南宁|Nanning|中国|22.817|108.366
+海口|Haikou|中国|20.044|110.199
+三亚|Sanya|中国|18.253|109.512
+兰州|Lanzhou|中国|36.061|103.834
+西宁|Xining|中国|36.617|101.778
+银川|Yinchuan|中国|38.487|106.231
+乌鲁木齐|Urumqi|中国|43.825|87.617
+拉萨|Lhasa|中国|29.652|91.172
+呼和浩特|Hohhot|中国|40.842|111.749
+太原|Taiyuan|中国|37.870|112.549
+石家庄|Shijiazhuang|中国|38.042|114.515
+宁波|Ningbo|中国|29.868|121.544
+无锡|Wuxi|中国|31.491|120.312
+常州|Changzhou|中国|31.811|119.974
+温州|Wenzhou|中国|27.994|120.699
+东莞|Dongguan|中国|23.021|113.752
+佛山|Foshan|中国|23.022|113.122
+珠海|Zhuhai|中国|22.271|113.577
+汕头|Shantou|中国|23.354|116.682
+洛阳|Luoyang|中国|34.620|112.454
+桂林|Guilin|中国|25.274|110.290
+扬州|Yangzhou|中国|32.394|119.413
+绍兴|Shaoxing|中国|30.000|120.580
+烟台|Yantai|中国|37.464|121.448
+徐州|Xuzhou|中国|34.205|117.284
+宜昌|Yichang|中国|30.692|111.287
+唐山|Tangshan|中国|39.644|118.183
+秦皇岛|Qinhuangdao|中国|39.941|119.589
+邯郸|Handan|中国|36.610|114.488
+邢台|Xingtai|中国|37.062|114.493
+保定|Baoding|中国|38.873|115.462
+张家口|Zhangjiakou|中国|40.783|114.871
+承德|Chengde|中国|40.952|117.959
+沧州|Cangzhou|中国|38.311|116.853
+廊坊|Langfang|中国|39.521|116.715
+衡水|Hengshui|中国|37.739|115.683
+大同|Datong|中国|40.094|113.291
+阳泉|Yangquan|中国|37.858|113.563
+长治|Changzhi|中国|36.184|113.105
+晋城|Jincheng|中国|35.502|112.833
+朔州|Shuozhou|中国|39.316|112.422
+晋中|Jinzhong|中国|37.684|112.755
+运城|Yuncheng|中国|35.023|110.993
+忻州|Xinzhou|中国|38.409|112.733
+临汾|Linfen|中国|36.089|111.519
+吕梁|Lvliang|中国|37.516|111.134
+平遥|Pingyao|中国|37.203|112.178
+包头|Baotou|中国|40.652|109.844
+乌海|Wuhai|中国|39.684|106.816
+赤峰|Chifeng|中国|42.268|118.964
+通辽|Tongliao|中国|43.612|122.265
+鄂尔多斯|Ordos|中国|39.609|109.782
+海拉尔|Hailar|中国|49.200|119.700
+巴彦淖尔|Bayannur|中国|40.751|107.421
+乌兰察布|Ulanqab|中国|40.993|113.133
+锡林浩特|Xilinhot|中国|43.939|116.070
+满洲里|Manzhouli|中国|49.600|117.433
+鞍山|Anshan|中国|41.124|122.990
+抚顺|Fushun|中国|41.887|123.944
+本溪|Benxi|中国|41.289|123.765
+丹东|Dandong|中国|40.129|124.395
+锦州|Jinzhou|中国|41.108|121.142
+营口|Yingkou|中国|40.665|122.232
+阜新|Fuxin|中国|42.016|121.659
+辽阳|Liaoyang|中国|41.272|123.173
+盘锦|Panjin|中国|41.121|122.074
+铁岭|Tieling|中国|42.293|123.841
+朝阳|Chaoyang|中国|41.570|120.459
+葫芦岛|Huludao|中国|40.752|120.836
+吉林|Jilin|中国|43.847|126.561
+四平|Siping|中国|43.161|124.378
+辽源|Liaoyuan|中国|42.885|125.137
+通化|Tonghua|中国|41.720|125.926
+白山|Baishan|中国|41.939|126.420
+松原|Songyuan|中国|45.129|124.828
+白城|Baicheng|中国|45.618|122.833
+延吉|Yanji|中国|42.888|129.502
+齐齐哈尔|Qiqihar|中国|47.339|123.962
+鸡西|Jixi|中国|45.293|130.962
+鹤岗|Hegang|中国|47.347|130.290
+双鸭山|Shuangyashan|中国|46.677|131.133
+大庆|Daqing|中国|46.583|125.000
+伊春|Yichun|中国|47.721|128.875
+佳木斯|Jiamusi|中国|46.797|130.311
+七台河|Qitaihe|中国|45.768|130.995
+牡丹江|Mudanjiang|中国|44.548|129.626
+黑河|Heihe|中国|50.244|127.490
+绥化|Suihua|中国|46.648|126.967
+漠河|Mohe|中国|52.971|122.526
+南通|Nantong|中国|32.030|120.875
+连云港|Lianyungang|中国|34.598|119.216
+淮安|Huai'an|中国|33.589|119.019
+盐城|Yancheng|中国|33.358|120.157
+镇江|Zhenjiang|中国|32.211|119.455
+泰州|Taizhou|中国|32.491|119.908
+宿迁|Suqian|中国|33.949|118.296
+昆山|Kunshan|中国|31.378|120.954
+常熟|Changshu|中国|31.646|120.742
+江阴|Jiangyin|中国|31.911|120.263
+张家港|Zhangjiagang|中国|31.865|120.539
+嘉兴|Jiaxing|中国|30.752|120.750
+湖州|Huzhou|中国|30.870|120.093
+金华|Jinhua|中国|29.107|119.644
+衢州|Quzhou|中国|28.959|118.869
+舟山|Zhoushan|中国|29.989|122.205
+台州|Taizhou|中国|28.663|121.433
+丽水|Lishui|中国|28.460|119.910
+义乌|Yiwu|中国|29.315|120.077
+芜湖|Wuhu|中国|31.353|118.429
+蚌埠|Bengbu|中国|32.941|117.361
+淮南|Huainan|中国|32.626|116.997
+马鞍山|Ma'anshan|中国|31.686|118.510
+淮北|Huaibei|中国|33.974|116.792
+铜陵|Tongling|中国|30.950|117.783
+安庆|Anqing|中国|30.509|117.043
+黄山|Huangshan|中国|29.711|118.312
+滁州|Chuzhou|中国|32.322|118.298
+阜阳|Fuyang|中国|32.900|115.817
+宿州|Suzhou|中国|33.636|116.979
+六安|Lu'an|中国|31.736|116.517
+亳州|Bozhou|中国|33.877|115.770
+池州|Chizhou|中国|30.661|117.478
+宣城|Xuancheng|中国|30.953|118.755
+莆田|Putian|中国|25.439|119.010
+三明|Sanming|中国|26.249|117.619
+泉州|Quanzhou|中国|24.914|118.586
+漳州|Zhangzhou|中国|24.513|117.656
+南平|Nanping|中国|26.645|118.174
+龙岩|Longyan|中国|25.075|117.018
+宁德|Ningde|中国|26.662|119.523
+晋江|Jinjiang|中国|24.820|118.574
+武夷山|Wuyishan|中国|27.760|118.031
+景德镇|Jingdezhen|中国|29.295|117.208
+萍乡|Pingxiang|中国|27.617|113.854
+九江|Jiujiang|中国|29.705|116.002
+新余|Xinyu|中国|27.804|114.933
+鹰潭|Yingtan|中国|28.233|117.000
+赣州|Ganzhou|中国|25.847|114.933
+吉安|Ji'an|中国|27.117|114.979
+宜春|Yichun|中国|27.833|114.400
+抚州|Fuzhou|中国|27.960|116.333
+上饶|Shangrao|中国|28.452|117.943
+婺源|Wuyuan|中国|29.250|117.855
+井冈山|Jinggangshan|中国|26.746|114.284
+淄博|Zibo|中国|36.791|118.063
+枣庄|Zaozhuang|中国|34.865|117.554
+东营|Dongying|中国|37.463|118.492
+潍坊|Weifang|中国|36.710|119.102
+济宁|Jining|中国|35.405|116.581
+泰安|Tai'an|中国|36.185|117.120
+威海|Weihai|中国|37.509|122.114
+日照|Rizhao|中国|35.414|119.529
+临沂|Linyi|中国|35.063|118.343
+德州|Dezhou|中国|37.447|116.367
+聊城|Liaocheng|中国|36.451|116.002
+滨州|Binzhou|中国|37.367|118.017
+菏泽|Heze|中国|35.239|115.474
+曲阜|Qufu|中国|35.597|116.991
+开封|Kaifeng|中国|34.799|114.307
+平顶山|Pingdingshan|中国|33.731|113.316
+安阳|Anyang|中国|36.096|114.383
+鹤壁|Hebi|中国|35.732|114.286
+新乡|Xinxiang|中国|35.190|113.802
+焦作|Jiaozuo|中国|35.239|113.239
+濮阳|Puyang|中国|35.756|115.044
+许昌|Xuchang|中国|34.032|113.863
+漯河|Luohe|中国|33.574|114.033
+三门峡|Sanmenxia|中国|34.781|111.193
+南阳|Nanyang|中国|33.005|112.547
+商丘|Shangqiu|中国|34.414|115.656
+信阳|Xinyang|中国|32.123|114.066
+周口|Zhoukou|中国|33.633|114.633
+驻马店|Zhumadian|中国|32.984|114.026
+济源|Jiyuan|中国|35.089|112.588
+黄石|Huangshi|中国|30.247|115.048
+十堰|Shiyan|中国|32.648|110.778
+襄阳|Xiangyang|中国|32.042|112.145
+鄂州|Ezhou|中国|30.396|114.887
+荆门|Jingmen|中国|31.034|112.205
+孝感|Xiaogan|中国|30.927|113.922
+荆州|Jingzhou|中国|30.350|112.190
+黄冈|Huanggang|中国|30.451|114.870
+咸宁|Xianning|中国|29.843|114.322
+随州|Suizhou|中国|31.711|113.363
+恩施|Enshi|中国|30.300|109.483
+仙桃|Xiantao|中国|30.371|113.443
+潜江|Qianjiang|中国|30.421|112.892
+天门|Tianmen|中国|30.659|113.154
+株洲|Zhuzhou|中国|27.833|113.150
+湘潭|Xiangtan|中国|27.850|112.900
+衡阳|Hengyang|中国|26.889|112.619
+邵阳|Shaoyang|中国|27.238|111.462
+岳阳|Yueyang|中国|29.375|113.095
+常德|Changde|中国|29.032|111.698
+张家界|Zhangjiajie|中国|29.129|110.478
+益阳|Yiyang|中国|28.554|112.355
+郴州|Chenzhou|中国|25.800|113.033
+永州|Yongzhou|中国|26.424|111.613
+怀化|Huaihua|中国|27.563|110.004
+娄底|Loudi|中国|27.734|111.994
+吉首|Jishou|中国|28.319|109.733
+凤凰|Fenghuang|中国|27.936|109.600
+韶关|Shaoguan|中国|24.800|113.583
+江门|Jiangmen|中国|22.583|113.083
+湛江|Zhanjiang|中国|21.234|110.387
+茂名|Maoming|中国|21.666|110.914
+肇庆|Zhaoqing|中国|23.049|112.461
+惠州|Huizhou|中国|23.111|114.415
+梅州|Meizhou|中国|24.289|116.118
+汕尾|Shanwei|中国|22.782|115.347
+河源|Heyuan|中国|23.733|114.683
+阳江|Yangjiang|中国|21.856|111.963
+清远|Qingyuan|中国|23.700|113.033
+中山|Zhongshan|中国|22.523|113.379
+潮州|Chaozhou|中国|23.654|116.623
+揭阳|Jieyang|中国|23.542|116.366
+云浮|Yunfu|中国|22.928|112.038
+柳州|Liuzhou|中国|24.324|109.407
+梧州|Wuzhou|中国|23.481|111.288
+北海|Beihai|中国|21.483|109.115
+防城港|Fangchenggang|中国|21.769|108.357
+钦州|Qinzhou|中国|21.982|108.651
+贵港|Guigang|中国|23.116|109.595
+玉林|Yulin|中国|22.631|110.147
+百色|Baise|中国|23.890|106.627
+贺州|Hezhou|中国|24.404|111.567
+河池|Hechi|中国|24.693|108.084
+来宾|Laibin|中国|23.747|109.222
+崇左|Chongzuo|中国|22.382|107.368
+阳朔|Yangshuo|中国|24.781|110.490
+儋州|Danzhou|中国|19.521|109.579
+琼海|Qionghai|中国|19.242|110.464
+万宁|Wanning|中国|18.799|110.384
+自贡|Zigong|中国|29.342|104.777
+攀枝花|Panzhihua|中国|26.585|101.713
+泸州|Luzhou|中国|28.890|105.426
+德阳|Deyang|中国|31.130|104.382
+绵阳|Mianyang|中国|31.468|104.682
+广元|Guangyuan|中国|32.442|105.823
+遂宁|Suining|中国|30.508|105.573
+内江|Neijiang|中国|29.584|105.062
+乐山|Leshan|中国|29.562|103.764
+南充|Nanchong|中国|30.795|106.085
+眉山|Meishan|中国|30.044|103.837
+宜宾|Yibin|中国|28.759|104.640
+广安|Guang'an|中国|30.474|106.637
+达州|Dazhou|中国|31.211|107.463
+雅安|Ya'an|中国|29.985|102.999
+巴中|Bazhong|中国|31.869|106.744
+资阳|Ziyang|中国|30.121|104.648
+西昌|Xichang|中国|27.896|102.263
+康定|Kangding|中国|30.002|101.957
+马尔康|Barkam|中国|31.901|102.221
+都江堰|Dujiangyan|中国|30.988|103.646
+峨眉山|Emeishan|中国|29.602|103.484
+六盘水|Liupanshui|中国|26.594|104.833
+遵义|Zunyi|中国|27.687|106.907
+安顺|Anshun|中国|26.250|105.933
+毕节|Bijie|中国|27.302|105.286
+铜仁|Tongren|中国|27.717|109.185
+凯里|Kaili|中国|26.586|107.980
+都匀|Duyun|中国|26.267|107.517
+兴义|Xingyi|中国|25.096|104.906
+曲靖|Qujing|中国|25.483|103.783
+玉溪|Yuxi|中国|24.355|102.542
+保山|Baoshan|中国|25.116|99.164
+昭通|Zhaotong|中国|27.317|103.717
+普洱|Pu'er|中国|22.789|100.975
+临沧|Lincang|中国|23.880|100.095
+景洪|Jinghong|中国|22.015|100.798
+香格里拉|Shangri-La|中国|27.825|99.708
+蒙自|Mengzi|中国|23.368|103.382
+文山|Wenshan|中国|23.363|104.250
+楚雄|Chuxiong|中国|25.036|101.546
+芒市|Mangshi|中国|24.433|98.585
+瑞丽|Ruili|中国|24.013|97.851
+腾冲|Tengchong|中国|24.995|98.513
+日喀则|Shigatse|中国|29.250|88.883
+昌都|Qamdo|中国|31.102|97.102
+林芝|Nyingchi|中国|29.649|94.355
+泽当|Tsetang|中国|29.244|91.773
+那曲|Nagqu|中国|31.477|92.057
+铜川|Tongchuan|中国|34.899|108.951
+宝鸡|Baoji|中国|34.368|107.237
+咸阳|Xianyang|中国|34.338|108.703
+渭南|Weinan|中国|34.504|109.509
+延安|Yan'an|中国|36.599|109.492
+汉中|Hanzhong|中国|33.075|107.022
+榆林|Yulin|中国|38.292|109.738
+安康|Ankang|中国|32.680|109.017
+商洛|Shangluo|中国|33.867|109.931
+嘉峪关|Jiayuguan|中国|39.811|98.286
+金昌|Jinchang|中国|38.501|102.194
+白银|Baiyin|中国|36.547|104.170
+天水|Tianshui|中国|34.580|105.742
+武威|Wuwei|中国|37.927|102.632
+张掖|Zhangye|中国|38.934|100.452
+平凉|Pingliang|中国|35.539|106.686
+酒泉|Jiuquan|中国|39.743|98.517
+庆阳|Qingyang|中国|35.710|107.645
+定西|Dingxi|中国|35.571|104.623
+陇南|Longnan|中国|33.398|104.917
+临夏|Linxia|中国|35.600|103.206
+合作|Hezuo|中国|34.986|102.909
+敦煌|Dunhuang|中国|40.167|94.683
+海东|Haidong|中国|36.480|102.416
+格尔木|Golmud|中国|36.429|94.825
+德令哈|Delingha|中国|37.376|97.375
+玉树|Yushu|中国|33.001|97.009
+石嘴山|Shizuishan|中国|38.981|106.389
+吴忠|Wuzhong|中国|37.987|106.201
+固原|Guyuan|中国|36.007|106.281
+中卫|Zhongwei|中国|37.511|105.191
+克拉玛依|Karamay|中国|45.585|84.887
+吐鲁番|Turpan|中国|42.948|89.179
+哈密|Hami|中国|42.834|93.506
+喀什|Kashgar|中国|39.467|75.987
+阿克苏|Aksu|中国|41.184|80.279
+和田|Hotan|中国|37.109|79.934
+库尔勒|Korla|中国|41.761|86.152
+伊宁|Yining|中国|43.915|81.322
+昌吉|Changji|中国|44.008|87.305
+博乐|Bole|中国|44.893|82.070
+阿勒泰|Altay|中国|47.850|88.133
+塔城|Tacheng|中国|46.745|82.958
+石河子|Shihezi|中国|44.302|86.037
+阿图什|Artux|中国|39.708|76.180
+香港|Hong Kong|中国香港|22.320|114.169
+澳门|Macau|中国澳门|22.199|113.544
+台北|Taipei|中国台湾|25.033|121.565
+台中|Taichung|中国台湾|24.148|120.674
+高雄|Kaohsiung|中国台湾|22.627|120.301
+新北|New Taipei|中国台湾|25.062|121.457
+桃园|Taoyuan|中国台湾|24.994|121.297
+台南|Tainan|中国台湾|22.993|120.205
+新竹|Hsinchu|中国台湾|24.804|120.969
+基隆|Keelung|中国台湾|25.131|121.741
+嘉义|Chiayi|中国台湾|23.479|120.449
+花莲|Hualien|中国台湾|23.977|121.604
+台东|Taitung|中国台湾|22.760|121.145
+宜兰|Yilan|中国台湾|24.757|121.753
+屏东|Pingtung|中国台湾|22.671|120.488
+彰化|Changhua|中国台湾|24.073|120.563
+苗栗|Miaoli|中国台湾|24.564|120.824
+南投|Nantou|中国台湾|23.916|120.664
+马公|Magong|中国台湾|23.565|119.586
+金门|Kinmen|中国台湾|24.432|118.318
+东京|Tokyo|日本|35.676|139.650
+京都|Kyoto|日本|35.011|135.768
+大阪|Osaka|日本|34.694|135.502
+横滨|Yokohama|日本|35.444|139.638
+名古屋|Nagoya|日本|35.181|136.906
+神户|Kobe|日本|34.690|135.196
+奈良|Nara|日本|34.685|135.805
+福冈|Fukuoka|日本|33.590|130.402
+札幌|Sapporo|日本|43.062|141.354
+仙台|Sendai|日本|38.268|140.870
+广岛|Hiroshima|日本|34.385|132.455
+那霸|Naha|日本|26.212|127.681
+金泽|Kanazawa|日本|36.561|136.656
+筑波|Tsukuba|日本|36.083|140.077
+北海道|Hokkaido|日本|43.062|141.354
+函馆|Hakodate|日本|41.769|140.729
+小樽|Otaru|日本|43.190|140.994
+旭川|Asahikawa|日本|43.771|142.365
+富良野|Furano|日本|43.342|142.383
+钏路|Kushiro|日本|42.985|144.381
+青森|Aomori|日本|40.822|140.747
+盛冈|Morioka|日本|39.702|141.154
+秋田|Akita|日本|39.720|140.103
+日光|Nikko|日本|36.750|139.598
+镰仓|Kamakura|日本|35.319|139.547
+箱根|Hakone|日本|35.232|139.107
+千叶|Chiba|日本|35.607|140.106
+埼玉|Saitama|日本|35.861|139.645
+川崎|Kawasaki|日本|35.531|139.703
+河口湖|Kawaguchiko|日本|35.497|138.755
+轻井泽|Karuizawa|日本|36.348|138.597
+长野|Nagano|日本|36.648|138.181
+新潟|Niigata|日本|37.916|139.036
+静冈|Shizuoka|日本|34.976|138.383
+高山|Takayama|日本|36.146|137.252
+白川乡|Shirakawa-go|日本|36.258|136.906
+伊势|Ise|日本|34.487|136.709
+大津|Otsu|日本|35.018|135.855
+宇治|Uji|日本|34.884|135.800
+和歌山|Wakayama|日本|34.226|135.167
+姬路|Himeji|日本|34.816|134.685
+冈山|Okayama|日本|34.655|133.919
+高松|Takamatsu|日本|34.343|134.047
+松山|Matsuyama|日本|33.839|132.766
+松江|Matsue|日本|35.468|133.049
+北九州|Kitakyushu|日本|33.883|130.875
+长崎|Nagasaki|日本|32.750|129.878
+熊本|Kumamoto|日本|32.803|130.708
+别府|Beppu|日本|33.285|131.491
+由布院|Yufuin|日本|33.264|131.354
+鹿儿岛|Kagoshima|日本|31.597|130.557
+宫古岛|Miyakojima|日本|24.805|125.281
+石垣岛|Ishigaki|日本|24.341|124.156
+山形|Yamagata|日本|38.233|140.367
+福岛|Fukushima|日本|37.750|140.467
+水户|Mito|日本|36.350|140.450
+宇都宫|Utsunomiya|日本|36.567|139.883
+前桥|Maebashi|日本|36.400|139.083
+富山|Toyama|日本|36.700|137.217
+福井|Fukui|日本|36.064|136.223
+甲府|Kofu|日本|35.667|138.567
+岐阜|Gifu|日本|35.423|136.760
+津|Tsu|日本|34.733|136.517
+鸟取|Tottori|日本|35.500|134.233
+山口|Yamaguchi|日本|34.183|131.467
+德岛|Tokushima|日本|34.067|134.567
+高知|Kochi|日本|33.550|133.533
+佐贺|Saga|日本|33.233|130.300
+大分|Oita|日本|33.233|131.600
+宫崎|Miyazaki|日本|31.917|131.417
+相模原|Sagamihara|日本|35.567|139.242
+滨松|Hamamatsu|日本|34.700|137.733
+堺|Sakai|日本|34.582|135.467
+久留米|Kurume|日本|33.317|130.517
+下关|Shimonoseki|日本|33.955|130.937
+福山|Fukuyama|日本|34.483|133.367
+仓敷|Kurashiki|日本|34.583|133.767
+尾道|Onomichi|日本|34.417|133.200
+吴|Kure|日本|34.232|132.567
+丰田|Toyota|日本|35.083|137.150
+冈崎|Okazaki|日本|34.950|137.167
+丰桥|Toyohashi|日本|34.767|137.383
+一宫|Ichinomiya|日本|35.300|136.800
+四日市|Yokkaichi|日本|34.967|136.617
+铃鹿|Suzuka|日本|34.883|136.583
+枚方|Hirakata|日本|34.814|135.649
+东大阪|Higashiosaka|日本|34.667|135.583
+丰中|Toyonaka|日本|34.782|135.469
+吹田|Suita|日本|34.761|135.516
+高槻|Takatsuki|日本|34.848|135.617
+西宫|Nishinomiya|日本|34.716|135.332
+尼崎|Amagasaki|日本|34.717|135.417
+明石|Akashi|日本|34.655|135.007
+船桥|Funabashi|日本|35.701|139.986
+柏|Kashiwa|日本|35.862|139.977
+松户|Matsudo|日本|35.780|139.901
+市川|Ichikawa|日本|35.734|139.906
+川口|Kawaguchi|日本|35.805|139.711
+川越|Kawagoe|日本|35.909|139.485
+所泽|Tokorozawa|日本|35.799|139.469
+八王子|Hachioji|日本|35.656|139.324
+町田|Machida|日本|35.540|139.451
+立川|Tachikawa|日本|35.709|139.419
+藤泽|Fujisawa|日本|35.349|139.477
+横须贺|Yokosuka|日本|35.284|139.667
+小田原|Odawara|日本|35.256|139.160
+热海|Atami|日本|35.088|139.053
+伊东|Ito|日本|34.967|139.083
+沼津|Numazu|日本|35.100|138.867
+富士|Fuji|日本|35.167|138.683
+长冈|Nagaoka|日本|37.450|138.850
+上越|Joetsu|日本|37.148|138.236
+松本|Matsumoto|日本|36.233|137.967
+上田|Ueda|日本|36.403|138.282
+诹访|Suwa|日本|36.038|138.113
+高崎|Takasaki|日本|36.333|139.017
+郡山|Koriyama|日本|37.400|140.383
+磐城|Iwaki|日本|37.050|140.883
+会津若松|Aizuwakamatsu|日本|37.494|139.930
+八户|Hachinohe|日本|40.500|141.500
+弘前|Hirosaki|日本|40.593|140.472
+带广|Obihiro|日本|42.917|143.204
+北见|Kitami|日本|43.803|143.891
+苫小牧|Tomakomai|日本|42.637|141.603
+室兰|Muroran|日本|42.317|140.988
+稚内|Wakkanai|日本|45.409|141.674
+网走|Abashiri|日本|44.021|144.270
+登别|Noboribetsu|日本|42.452|141.179
+千岁|Chitose|日本|42.819|141.652
+酒田|Sakata|日本|38.917|139.855
+鹤冈|Tsuruoka|日本|38.722|139.822
+米泽|Yonezawa|日本|37.910|140.117
+石卷|Ishinomaki|日本|38.417|141.300
+日立|Hitachi|日本|36.600|140.650
+成田|Narita|日本|35.783|140.317
+舞鹤|Maizuru|日本|35.450|135.333
+鸣门|Naruto|日本|34.199|134.609
+今治|Imabari|日本|34.070|133.000
+宇和岛|Uwajima|日本|33.224|132.560
+丸龟|Marugame|日本|34.283|133.783
+佐世保|Sasebo|日本|33.168|129.725
+唐津|Karatsu|日本|33.443|129.970
+延冈|Nobeoka|日本|32.583|131.667
+都城|Miyakonojo|日本|31.733|131.067
+名护|Nago|日本|26.615|127.985
+冲绳市|Okinawa|日本|26.336|127.801
+出云|Izumo|日本|35.367|132.767
+米子|Yonago|日本|35.433|133.333
+萩|Hagi|日本|34.400|131.417
+岩国|Iwakuni|日本|34.163|132.220
+彦根|Hikone|日本|35.250|136.250
+长滨|Nagahama|日本|35.383|136.267
+敦贺|Tsuruga|日本|35.653|136.063
+高冈|Takaoka|日本|36.750|137.017
+浦安|Urayasu|日本|35.659|139.901
+屋久岛|Yakushima|日本|30.420|130.570
+奄美|Amami|日本|28.377|129.494
+白滨|Shirahama|日本|33.683|135.350
+洲本|Sumoto|日本|34.343|134.889
+二世谷|Niseko|日本|42.809|140.686
+草津|Kusatsu|日本|35.017|135.967
+守山|Moriyama|日本|35.067|135.983
+栗东|Ritto|日本|35.027|136.000
+近江八幡|Omihachiman|日本|35.129|136.098
+野洲|Yasu|日本|35.101|136.018
+甲贺|Koka|日本|34.980|136.158
+高岛|Takashima|日本|35.413|136.016
+龟冈|Kameoka|日本|35.000|135.583
+向日|Muko|日本|34.965|135.704
+京田边|Kyotanabe|日本|34.804|135.767
+木津川|Kizugawa|日本|34.737|135.840
+福知山|Fukuchiyama|日本|35.300|135.117
+宫津|Miyazu|日本|35.536|135.199
+茨木|Ibaraki|日本|34.816|135.568
+池田|Ikeda|日本|34.822|135.430
+守口|Moriguchi|日本|34.733|135.567
+寝屋川|Neyagawa|日本|34.766|135.628
+八尾|Yao|日本|34.617|135.600
+岸和田|Kishiwada|日本|34.467|135.367
+泉佐野|Izumisano|日本|34.417|135.317
+芦屋|Ashiya|日本|34.728|135.303
+宝冢|Takarazuka|日本|34.799|135.357
+伊丹|Itami|日本|34.784|135.401
+三田|Sanda|日本|34.884|135.227
+加古川|Kakogawa|日本|34.769|134.829
+橿原|Kashihara|日本|34.509|135.793
+生驹|Ikoma|日本|34.683|135.700
+大和郡山|Yamatokoriyama|日本|34.607|135.770
+天理|Tenri|日本|34.583|135.833
+长冈京|Nagaokakyo|日本|34.926|135.696
+箕面|Minoh|日本|34.827|135.470
+南草津|Minami-Kusatsu|日本|34.993|135.959
+首尔|Seoul|韩国|37.566|126.978
+釜山|Busan|韩国|35.180|129.075
+济州|Jeju|韩国|33.499|126.531
+新加坡|Singapore|新加坡|1.352|103.820
+曼谷|Bangkok|泰国|13.756|100.502
+清迈|Chiang Mai|泰国|18.788|98.985
+普吉|Phuket|泰国|7.880|98.392
+吉隆坡|Kuala Lumpur|马来西亚|3.139|101.687
+槟城|Penang|马来西亚|5.414|100.329
+雅加达|Jakarta|印度尼西亚|-6.208|106.846
+巴厘岛|Bali|印度尼西亚|-8.409|115.189
+马尼拉|Manila|菲律宾|14.600|120.984
+河内|Hanoi|越南|21.028|105.804
+胡志明市|Ho Chi Minh City|越南|10.823|106.630
+岘港|Da Nang|越南|16.054|108.202
+金边|Phnom Penh|柬埔寨|11.556|104.928
+暹粒|Siem Reap|柬埔寨|13.367|103.845
+仰光|Yangon|缅甸|16.866|96.195
+新德里|New Delhi|印度|28.614|77.209
+孟买|Mumbai|印度|19.076|72.878
+班加罗尔|Bangalore|印度|12.972|77.595
+加德满都|Kathmandu|尼泊尔|27.717|85.324
+科伦坡|Colombo|斯里兰卡|6.927|79.861
+马累|Male|马尔代夫|4.175|73.509
+达卡|Dhaka|孟加拉国|23.810|90.413
+迪拜|Dubai|阿联酋|25.205|55.271
+阿布扎比|Abu Dhabi|阿联酋|24.454|54.377
+多哈|Doha|卡塔尔|25.286|51.531
+利雅得|Riyadh|沙特阿拉伯|24.713|46.675
+德黑兰|Tehran|伊朗|35.689|51.389
+伊斯坦布尔|Istanbul|土耳其|41.008|28.978
+安卡拉|Ankara|土耳其|39.934|32.860
+特拉维夫|Tel Aviv|以色列|32.085|34.782
+耶路撒冷|Jerusalem|以色列|31.769|35.216
+乌兰巴托|Ulaanbaatar|蒙古|47.886|106.906
+阿拉木图|Almaty|哈萨克斯坦|43.238|76.946
+塔什干|Tashkent|乌兹别克斯坦|41.299|69.240
+撒马尔罕|Samarkand|乌兹别克斯坦|39.654|66.976
+伦敦|London|英国|51.507|-0.128
+牛津|Oxford|英国|51.752|-1.258
+剑桥|Cambridge UK|英国|52.205|0.122
+爱丁堡|Edinburgh|英国|55.953|-3.188
+曼彻斯特|Manchester|英国|53.481|-2.243
+伯明翰|Birmingham|英国|52.486|-1.890
+都柏林|Dublin|爱尔兰|53.350|-6.260
+巴黎|Paris|法国|48.857|2.352
+里昂|Lyon|法国|45.764|4.836
+尼斯|Nice|法国|43.710|7.262
+马赛|Marseille|法国|43.297|5.370
+柏林|Berlin|德国|52.520|13.405
+慕尼黑|Munich|德国|48.135|11.582
+法兰克福|Frankfurt|德国|50.110|8.682
+汉堡|Hamburg|德国|53.551|9.993
+海德堡|Heidelberg|德国|49.399|8.672
+科隆|Cologne|德国|50.938|6.960
+阿姆斯特丹|Amsterdam|荷兰|52.368|4.904
+鹿特丹|Rotterdam|荷兰|51.924|4.478
+布鲁塞尔|Brussels|比利时|50.850|4.352
+卢森堡|Luxembourg|卢森堡|49.611|6.130
+苏黎世|Zurich|瑞士|47.377|8.542
+日内瓦|Geneva|瑞士|46.204|6.143
+洛桑|Lausanne|瑞士|46.520|6.633
+维也纳|Vienna|奥地利|48.208|16.373
+萨尔茨堡|Salzburg|奥地利|47.809|13.055
+布拉格|Prague|捷克|50.076|14.438
+布达佩斯|Budapest|匈牙利|47.498|19.040
+华沙|Warsaw|波兰|52.230|21.012
+克拉科夫|Krakow|波兰|50.065|19.945
+哥本哈根|Copenhagen|丹麦|55.676|12.568
+斯德哥尔摩|Stockholm|瑞典|59.329|18.069
+奥斯陆|Oslo|挪威|59.914|10.752
+赫尔辛基|Helsinki|芬兰|60.170|24.938
+雷克雅未克|Reykjavik|冰岛|64.147|-21.942
+罗马|Rome|意大利|41.903|12.496
+米兰|Milan|意大利|45.464|9.190
+佛罗伦萨|Florence|意大利|43.770|11.256
+威尼斯|Venice|意大利|45.441|12.316
+那不勒斯|Naples|意大利|40.852|14.268
+马德里|Madrid|西班牙|40.417|-3.704
+巴塞罗那|Barcelona|西班牙|41.385|2.173
+塞维利亚|Seville|西班牙|37.389|-5.984
+里斯本|Lisbon|葡萄牙|38.722|-9.139
+波尔图|Porto|葡萄牙|41.158|-8.629
+雅典|Athens|希腊|37.984|23.728
+圣托里尼|Santorini|希腊|36.393|25.461
+莫斯科|Moscow|俄罗斯|55.756|37.617
+圣彼得堡|Saint Petersburg|俄罗斯|59.931|30.361
+符拉迪沃斯托克|Vladivostok|俄罗斯|43.116|131.882
+基辅|Kyiv|乌克兰|50.450|30.523
+布加勒斯特|Bucharest|罗马尼亚|44.427|26.103
+贝尔格莱德|Belgrade|塞尔维亚|44.787|20.457
+萨格勒布|Zagreb|克罗地亚|45.815|15.982
+杜布罗夫尼克|Dubrovnik|克罗地亚|42.651|18.094
+塔林|Tallinn|爱沙尼亚|59.437|24.754
+里加|Riga|拉脱维亚|56.950|24.105
+维尔纽斯|Vilnius|立陶宛|54.687|25.280
+纽约|New York|美国|40.713|-74.006
+波士顿|Boston|美国|42.360|-71.059
+华盛顿|Washington DC|美国|38.907|-77.037
+费城|Philadelphia|美国|39.953|-75.165
+匹兹堡|Pittsburgh|美国|40.441|-79.996
+芝加哥|Chicago|美国|41.878|-87.630
+安娜堡|Ann Arbor|美国|42.281|-83.743
+亚特兰大|Atlanta|美国|33.749|-84.388
+迈阿密|Miami|美国|25.762|-80.192
+奥兰多|Orlando|美国|28.538|-81.379
+休斯顿|Houston|美国|29.760|-95.370
+达拉斯|Dallas|美国|32.777|-96.797
+奥斯汀|Austin|美国|30.267|-97.743
+丹佛|Denver|美国|39.739|-104.990
+盐湖城|Salt Lake City|美国|40.761|-111.891
+凤凰城|Phoenix|美国|33.448|-112.074
+拉斯维加斯|Las Vegas|美国|36.170|-115.140
+洛杉矶|Los Angeles|美国|34.052|-118.244
+圣地亚哥|San Diego|美国|32.716|-117.161
+旧金山|San Francisco|美国|37.775|-122.419
+帕洛阿尔托|Palo Alto|美国|37.442|-122.143
+圣何塞|San Jose|美国|37.339|-121.895
+西雅图|Seattle|美国|47.606|-122.332
+波特兰|Portland|美国|45.505|-122.675
+檀香山|Honolulu|美国|21.307|-157.858
+安克雷奇|Anchorage|美国|61.218|-149.900
+多伦多|Toronto|加拿大|43.653|-79.383
+温哥华|Vancouver|加拿大|49.283|-123.121
+蒙特利尔|Montreal|加拿大|45.502|-73.567
+渥太华|Ottawa|加拿大|45.421|-75.697
+卡尔加里|Calgary|加拿大|51.045|-114.072
+墨西哥城|Mexico City|墨西哥|19.433|-99.133
+坎昆|Cancun|墨西哥|21.161|-86.852
+哈瓦那|Havana|古巴|23.113|-82.366
+波哥大|Bogota|哥伦比亚|4.711|-74.072
+基多|Quito|厄瓜多尔|-0.181|-78.468
+利马|Lima|秘鲁|-12.046|-77.043
+库斯科|Cusco|秘鲁|-13.532|-71.967
+圣地亚哥(智利)|Santiago|智利|-33.449|-70.669
+布宜诺斯艾利斯|Buenos Aires|阿根廷|-34.604|-58.382
+圣保罗|Sao Paulo|巴西|-23.551|-46.633
+里约热内卢|Rio de Janeiro|巴西|-22.907|-43.173
+开罗|Cairo|埃及|30.044|31.236
+卡萨布兰卡|Casablanca|摩洛哥|33.573|-7.590
+马拉喀什|Marrakech|摩洛哥|31.629|-7.981
+突尼斯|Tunis|突尼斯|36.806|10.181
+拉各斯|Lagos|尼日利亚|6.524|3.379
+阿克拉|Accra|加纳|5.604|-0.187
+内罗毕|Nairobi|肯尼亚|-1.292|36.822
+亚的斯亚贝巴|Addis Ababa|埃塞俄比亚|9.030|38.740
+达累斯萨拉姆|Dar es Salaam|坦桑尼亚|-6.792|39.208
+开普敦|Cape Town|南非|-33.925|18.424
+约翰内斯堡|Johannesburg|南非|-26.204|28.047
+路易港|Port Louis|毛里求斯|-20.161|57.499
+悉尼|Sydney|澳大利亚|-33.869|151.209
+墨尔本|Melbourne|澳大利亚|-37.814|144.963
+布里斯班|Brisbane|澳大利亚|-27.470|153.026
+珀斯|Perth|澳大利亚|-31.951|115.861
+阿德莱德|Adelaide|澳大利亚|-34.929|138.601
+堪培拉|Canberra|澳大利亚|-35.281|149.130
+奥克兰|Auckland|新西兰|-36.849|174.763
+惠灵顿|Wellington|新西兰|-41.287|174.776
+皇后镇|Queenstown|新西兰|-45.031|168.663
+`.trim().split("\n").map(l => {
+  const [zh, en, country, lat, lon] = l.split("|");
+  return { zh, en, country, lat: +lat, lon: +lon };
+});
+
+// Other spellings people type: traditional and Japanese kanji, katakana, and English or local country names.
+const CITY_ALIASES = {
+  东京: "東京|东京都|東京都", 横滨: "横浜|神奈川|神奈川県", 神户: "神戸|兵库|兵庫|兵庫県", 福冈: "福岡", 广岛: "広島|廣島", 那霸: "那覇|沖縄|冲绳", 金泽: "金沢|金澤|石川|石川県", 筑波: "つくば",
+  北海道: "ほっかいどう", 函馆: "函館", 钏路: "釧路", 盛冈: "盛岡|岩手|岩手県", 镰仓: "鎌倉", 千叶: "千葉", 埼玉: "さいたま",
+  河口湖: "富士山|富士五湖", 轻井泽: "軽井沢|輕井澤", 长野: "長野", 静冈: "静岡|靜岡", 高山: "飛騨高山|飛驒高山",
+  白川乡: "白川郷|白川鄉", 伊势: "伊勢", 大津: "琵琶湖|滋贺|滋賀|滋賀県", 姬路: "姫路", 冈山: "岡山", 长崎: "長崎", 别府: "別府",
+  由布院: "湯布院", 鹿儿岛: "鹿児島|鹿兒島", 宫古岛: "宮古島|宫古島", 石垣岛: "石垣島|石垣",
+  首尔: "首爾|ソウル|漢城|汉城", 济州: "濟州|済州", 台北: "臺北|台湾|臺灣|台灣", 台中: "臺中", 澳门: "澳門",
+  广州: "廣州|广东|廣東", 厦门: "廈門", 苏州: "蘇州", 沈阳: "瀋陽|辽宁|遼寧", 哈尔滨: "哈爾濱|黑龙江|黑龍江", 长沙: "長沙|湖南", 长春: "長春", 郑州: "鄭州|河南",
+  青岛: "青島", 大连: "大連", 南宁: "南寧|广西|廣西", 乌鲁木齐: "烏魯木齊|新疆", 兰州: "蘭州|甘肃|甘肅", 宁波: "寧波", 无锡: "無錫", 温州: "溫州",
+  东莞: "東莞", 洛阳: "洛陽", 扬州: "揚州", 绍兴: "紹興", 烟台: "煙台", 重庆: "重慶", 武汉: "武漢|湖北", 贵阳: "貴陽|贵州|貴州",
+  三亚: "三亞", 西宁: "西寧|青海", 银川: "銀川|宁夏|寧夏", 拉萨: "拉薩|西藏", 石家庄: "石家莊|河北", 济南: "濟南|山东|山東", 丽江: "麗江", 汕头: "汕頭",
+  新加坡: "シンガポール", 曼谷: "バンコク", 纽约: "紐約|ニューヨーク|NYC", 伦敦: "倫敦|ロンドン", 巴黎: "パリ",
+  旧金山: "舊金山|三藩市|サンフランシスコ|SF", 洛杉矶: "洛杉磯|ロサンゼルス|LA", 悉尼: "雪梨|シドニー", 墨尔本: "墨爾本|メルボルン",
+  温哥华: "溫哥華|バンクーバー", 多伦多: "多倫多|トロント", 华盛顿: "華盛頓|ワシントン", 西雅图: "西雅圖|シアトル", 波士顿: "波士頓|ボストン",
+  芝加哥: "シカゴ", 柏林: "ベルリン", 罗马: "羅馬|ローマ", 马德里: "馬德里|マドリード", 莫斯科: "モスクワ", 迪拜: "杜拜|ドバイ",
+  吉隆坡: "クアラルンプール", 河内: "ハノイ", 胡志明市: "ホーチミン|西贡|西貢|Saigon", 马尼拉: "馬尼拉|マニラ", 雅加达: "雅加達|ジャカルタ",
+  巴厘岛: "峇里島|バリ島", 檀香山: "火奴鲁鲁|ホノルル|夏威夷|Hawaii", 维也纳: "維也納|ウィーン", 布拉格: "プラハ", 阿姆斯特丹: "アムステルダム",
+  苏黎世: "蘇黎世|チューリッヒ", 日内瓦: "日內瓦|ジュネーブ", 慕尼黑: "ミュンヘン", 法兰克福: "法蘭克福|フランクフルト", 米兰: "米蘭|ミラノ",
+  巴塞罗那: "巴塞隆納|バルセロナ", 里斯本: "リスボン", 雅典: "アテネ", 伊斯坦布尔: "伊斯坦堡|イスタンブール", 开罗: "開羅|カイロ",
+  奥克兰: "奧克蘭|オークランド", 新德里: "ニューデリー", 孟买: "孟買|ムンバイ",
+  山形: "", 福岛: "福島", 水户: "水戸|茨城|茨城県", 宇都宫: "宇都宮|栃木|栃木県", 前桥: "前橋|群马|群馬|群馬県", 富山: "",
+  福井: "", 甲府: "山梨|山梨県", 岐阜: "", 津: "三重|三重県", 鸟取: "鳥取", 山口: "",
+  德岛: "徳島", 高知: "", 佐贺: "佐賀", 大分: "", 宫崎: "宮崎", 相模原: "",
+  滨松: "浜松", 堺: "", 久留米: "", 下关: "下関", 福山: "", 仓敷: "倉敷",
+  尾道: "", 吴: "呉", 丰田: "豊田", 冈崎: "岡崎", 丰桥: "豊橋", 一宫: "一宮",
+  四日市: "", 铃鹿: "鈴鹿", 枚方: "", 东大阪: "東大阪", 丰中: "豊中", 吹田: "",
+  高槻: "", 西宫: "西宮", 尼崎: "", 明石: "", 船桥: "船橋", 柏: "",
+  松户: "松戸", 市川: "", 川口: "", 川越: "", 所泽: "所沢", 八王子: "",
+  町田: "", 立川: "", 藤泽: "藤沢", 横须贺: "横須賀", 小田原: "", 热海: "熱海",
+  伊东: "伊東", 沼津: "", 富士: "", 长冈: "長岡", 上越: "", 松本: "",
+  上田: "", 诹访: "諏訪", 高崎: "", 郡山: "", 磐城: "いわき", 会津若松: "",
+  八户: "八戸", 弘前: "", 带广: "帯広", 北见: "北見", 苫小牧: "", 室兰: "室蘭",
+  稚内: "", 网走: "網走", 登别: "登別", 千岁: "千歳", 酒田: "", 鹤冈: "鶴岡",
+  米泽: "米沢", 石卷: "石巻", 日立: "", 成田: "", 舞鹤: "舞鶴", 鸣门: "鳴門",
+  今治: "", 宇和岛: "宇和島", 丸龟: "丸亀", 佐世保: "", 唐津: "", 延冈: "延岡",
+  都城: "", 名护: "名護", 冲绳市: "沖縄市", 出云: "出雲", 米子: "", 萩: "",
+  岩国: "", 彦根: "", 长滨: "長浜", 敦贺: "敦賀", 高冈: "高岡", 浦安: "",
+  屋久岛: "屋久島", 奄美: "", 白滨: "白浜", 洲本: "|淡路岛|淡路島", 二世谷: "ニセコ", 仙台: "宫城|宮城|宮城県",
+  名古屋: "爱知|愛知|愛知県", 松江: "岛根|島根|島根県", 高松: "香川|香川県", 松山: "爱媛|愛媛|愛媛県", 札幌: "札幌市", 桃园: "桃園",
+  台南: "臺南", 嘉义: "嘉義", 花莲: "花蓮", 台东: "臺東", 宜兰: "宜蘭", 屏东: "屏東",
+  马公: "馬公|澎湖", 金门: "金門",
+            南京: "江苏|江蘇", 杭州: "浙江|西湖", 成都: "四川", 昆明: "云南|雲南", 呼和浩特: "内蒙古|內蒙古", 太原: "山西",
+  西安: "陕西|陝西", 南昌: "江西", 合肥: "安徽", 福州: "福建", 海口: "海南", 景洪: "西双版纳|西雙版納",
+  海拉尔: "呼伦贝尔|呼倫貝爾", 大理: "大理古城",
+  栗东: "栗東", 甲贺: "甲賀", 高岛: "高島", 龟冈: "亀岡", 京田边: "京田辺", 宫津: "宮津",
+  宝冢: "宝塚", 生驹: "生駒", 长冈京: "長岡京", 草津: "草津市", 南草津: "みなみ草津|Minamikusatsu",
+};
+const COUNTRY_ALIASES = {
+  中国: "China|中國", 中国香港: "Hong Kong|香港", 中国澳门: "Macau|Macao|澳門", 中国台湾: "Taiwan|台灣|臺灣",
+  日本: "Japan", 韩国: "Korea|South Korea|韓国|韓國", 新加坡: "Singapore", 泰国: "Thailand|泰國|タイ", 马来西亚: "Malaysia|馬來西亞",
+  印度尼西亚: "Indonesia|印尼", 菲律宾: "Philippines|菲律賓", 越南: "Vietnam", 柬埔寨: "Cambodia", 缅甸: "Myanmar|緬甸",
+  印度: "India", 尼泊尔: "Nepal|尼泊爾", 斯里兰卡: "Sri Lanka|斯里蘭卡", 马尔代夫: "Maldives|馬爾代夫", 孟加拉国: "Bangladesh|孟加拉",
+  阿联酋: "UAE|United Arab Emirates|阿聯酋", 卡塔尔: "Qatar|卡達", 沙特阿拉伯: "Saudi Arabia|沙特", 伊朗: "Iran", 土耳其: "Turkey|Türkiye",
+  以色列: "Israel", 蒙古: "Mongolia", 哈萨克斯坦: "Kazakhstan|哈薩克", 乌兹别克斯坦: "Uzbekistan|烏茲別克",
+  英国: "UK|United Kingdom|England|Britain|英國|イギリス", 爱尔兰: "Ireland|愛爾蘭", 法国: "France|法國|フランス", 德国: "Germany|德國|ドイツ",
+  荷兰: "Netherlands|Holland|荷蘭|オランダ", 比利时: "Belgium|比利時", 卢森堡: "Luxembourg|盧森堡", 瑞士: "Switzerland|スイス",
+  奥地利: "Austria|奧地利", 捷克: "Czech|Czechia", 匈牙利: "Hungary", 波兰: "Poland|波蘭", 丹麦: "Denmark|丹麥", 瑞典: "Sweden",
+  挪威: "Norway", 芬兰: "Finland|芬蘭", 冰岛: "Iceland|冰島", 意大利: "Italy|義大利|イタリア", 西班牙: "Spain|スペイン",
+  葡萄牙: "Portugal", 希腊: "Greece|希臘", 俄罗斯: "Russia|俄羅斯|ロシア", 乌克兰: "Ukraine|烏克蘭", 罗马尼亚: "Romania|羅馬尼亞",
+  塞尔维亚: "Serbia|塞爾維亞", 克罗地亚: "Croatia|克羅地亞", 爱沙尼亚: "Estonia|愛沙尼亞", 拉脱维亚: "Latvia|拉脫維亞", 立陶宛: "Lithuania",
+  美国: "USA|US|United States|America|美國|米国|アメリカ", 加拿大: "Canada|カナダ", 墨西哥: "Mexico", 古巴: "Cuba",
+  哥伦比亚: "Colombia|哥倫比亞", 厄瓜多尔: "Ecuador|厄瓜多", 秘鲁: "Peru|秘魯", 智利: "Chile", 阿根廷: "Argentina", 巴西: "Brazil|ブラジル",
+  埃及: "Egypt", 摩洛哥: "Morocco", 突尼斯: "Tunisia", 尼日利亚: "Nigeria|奈及利亞", 加纳: "Ghana|迦納", 肯尼亚: "Kenya|肯亞",
+  埃塞俄比亚: "Ethiopia|衣索比亞", 坦桑尼亚: "Tanzania|坦尚尼亞", 南非: "South Africa", 毛里求斯: "Mauritius|模里西斯",
+  澳大利亚: "Australia|澳洲|オーストラリア", 新西兰: "New Zealand|紐西蘭|ニュージーランド",
+};
+// The rest of the world comes from Natural Earth (see src/make_world_places.py): extra cities, plus
+// the state / province and Japanese and traditional names of cities already listed above.
+for (const g of GAZ) {
+  const x = WORLD_PLACES.extra[g.zh];
+  if (x) [g.region, g.ja, g.zht, g.pop] = x;
+}
+for (const [zh, en, country, lat, lon, region, ja, zht, pop] of WORLD_PLACES.places) GAZ.push({ zh, en, country, lat, lon, region, ja, zht, pop });
+for (const g of GAZ) {
+  const lower = list => list.filter(Boolean).map(s => s.toLowerCase());
+  g.keys = lower([g.zh, g.en, g.ja, g.zht, ...(CITY_ALIASES[g.zh] || "").split("|")]);
+  g.rkey = (g.region || "").toLowerCase();
+  g.ckeys = lower([g.country, WORLD_PLACES.countries[g.country], ...(COUNTRY_ALIASES[g.country] || "").split("|")]);
+}
+
+/* ---------- Geometry ---------- */
+const mesh50 = topojson.mesh(WORLD50, WORLD50.objects.countries);
+const mesh110 = topojson.mesh(WORLD110, WORLD110.objects.countries);
+// province / state borders (Natural Earth admin-1 lines, simplified; see src/make_provinces.py)
+const provLines = PROVINCES.lines.map(l => {
+  const pts = [];
+  let x = 0, y = 0;
+  for (let i = 0; i < l.length; i += 2) { x += l[i]; y += l[i + 1]; pts.push([x / PROVINCES.q, y / PROVINCES.q]); }
+  // a middle point and how far the line reaches from it, to skip lines that can't be on screen
+  const mid = pts[pts.length >> 1];
+  let reach = 0;
+  for (const q of pts) reach = Math.max(reach, d3.geoDistance(mid, q));
+  return { pts, mid, reach };
+});
+// provinces / states / prefectures as shapes, for "light up" (see src/make_regions.py); decoded on first use
+let regionList = null;
+function regions() {
+  if (regionList) return regionList;
+  const q = REGIONS.q;
+  regionList = REGIONS.regions.map(([zh, en, country, ...polys]) => {
+    let x0 = 180, x1 = -180, y0 = 90, y1 = -90;
+    const coordinates = polys.map(rings => rings.map(r => {
+      const pts = [];
+      let x = 0, y = 0;
+      for (let i = 0; i < r.length; i += 2) {
+        x += r[i]; y += r[i + 1];
+        const lon = x / q, lat = y / q;
+        pts.push([lon, lat]);
+        if (lon < x0) x0 = lon; if (lon > x1) x1 = lon; if (lat < y0) y0 = lat; if (lat > y1) y1 = lat;
+      }
+      return pts;
+    }));
+    return { zh, en, country, box: [x0, y0, x1, y1], geo: { type: "MultiPolygon", coordinates } };
+  });
+  return regionList;
+}
+const regionCache = new Map();
+function regionAt(lon, lat) {
+  const k = `${lon.toFixed(3)},${lat.toFixed(3)}`;
+  if (regionCache.has(k)) return regionCache.get(k);
+  const inside = (x, y) => regions().find(r => x >= r.box[0] && x <= r.box[2] && y >= r.box[1] && y <= r.box[3] && d3.geoContains(r.geo, [x, y]));
+  let hit = inside(lon, lat) || null;
+  // coastal towns can sit just off the simplified shoreline
+  for (const rad of [0.05, 0.12, 0.25]) {
+    for (let a = 0; a < 360 && !hit; a += 45) {
+      const t = a * Math.PI / 180;
+      hit = inside(lon + rad * Math.cos(t) / Math.max(.2, Math.cos(lat * Math.PI / 180)), lat + rad * Math.sin(t)) || null;
+    }
+    if (hit) break;
+  }
+  regionCache.set(k, hit);
+  return hit;
+}
+// the places you stayed and the cities you passed through on the way
+function litRegions() {
+  const pts = S.stops.flatMap(s => [s, ...viasOf(s)]);
+  return [...new Set(pts.map(p => regionAt(+p.lon, +p.lat)).filter(Boolean))];
+}
+
+// only the lines on the near side and, when zoomed in, inside the window
+function visibleProvinces(center, R, w, h) {
+  const seen = Math.min(Math.PI / 2, Math.asin(Math.min(1, Math.hypot(w, h) / 2 / R)) + 0.05);
+  return { type: "MultiLineString", coordinates: provLines.filter(l => d3.geoDistance(center, l.mid) < seen + l.reach).map(l => l.pts) };
+}
+const countries = topojson.feature(WORLD50, WORLD50.objects.countries).features;
+const graticule = d3.geoGraticule().step([15, 15])();
+const DEG = 180 / Math.PI;
+
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const canvas = document.getElementById("globe");
+const ctx = canvas.getContext("2d");
+const proj = d3.geoOrthographic().clipAngle(90).precision(0.5);
+const back = d3.geoOrthographic().clipAngle(90).precision(1.2).reflectX(true);
+const path = d3.geoPath(proj, ctx);
+const backPath = d3.geoPath(back, ctx);
+
+const ZOOM_MIN = 1, ZOOM_MAX = 16;
+const view = { w: 0, h: 0, dpr: 1, cx: 0, cy: 0, base: 300, zoom: ZOOM_MIN, rot: [-110, -28], vel: [0, 0] };
+
+/* ---------- State ---------- */
+const S = {
+  items: [],
+  stops: [],
+  arcs: [],
+  places: [],
+  baseOf: new Map(),
+  mode: "loading",       // loading | db | local
+  canEdit: false,
+  selected: null,        // stop id
+  hoverId: null,         // stop id hovered in list
+  hoverPlace: null,
+  editing: null,         // form state
+  picking: false,
+  spin: !reduced,
+  idleUntil: 0,
+  focusNext: null,       // what renderPanel should focus next
+  cancelArmed: false,
+  cancelTimer: 0,
+  pendingImport: null,   // stops read from a file, waiting for the replace confirmation
+};
+
+/* ---------- Helpers ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const placeKey = s => `${(+s.lat).toFixed(2)},${(+s.lon).toFixed(2)}`;
+
+/* ---------- Language ---------- */
+const LANG_KEY = "lifelines.lang.v1";
+const I18N = {
+  zh: {
+    title: "人生", globeLabel: "标出人生足迹的地球。拖动或用方向键旋转，滚轮或加减号缩放。地点列表在右侧。",
+    dockLabel: "地球控制", spin: "自转", light: "点亮",
+    langBtn: "English", panelLabel: "轨迹列表", panelTitle: "足迹", add: "添加地点", export: "导出", import: "导入",
+    present: "至今", notYet: "还没开始", days: "{n} 天", years: "{n} 年", months: "{n} 个月",
+    loading: "正在读取轨迹…", noStops: "还没有记录地点",
+    statYears: "<b>{n}</b> 年", statCities: "<b>{n}</b> 座城市", statCountries: "<b>{n}</b> 个国家",
+    importAsk: "文件里有 {n} 个地点，导入后会替换现在的 {m} 个。", importExportFirst: "先导出现在的，再替换", importGo: "直接替换", cancel: "取消",
+    exampleBanner: "带「示例」标记的是演示用的轨迹。添加你自己的地点后，可以把示例一键清除。", clearExamples: "清除 {n} 条示例",
+    emptyTitle: "从第一站开始", emptyBody: "点右上角「添加地点」，写下城市和你在那里的时间段。地点会成为地球上的光点，前后两站之间会连起一条光线。", seeExamples: "先看看示例",
+    foldOpen: "展开{name}的 {n} 次出行", foldClose: "收起{name}的 {n} 次出行",
+    tripTag: "出行", tripTitle: "这段时间落在「{name}」的时间段里，算作从那里出发的出行", tripsTag: "{n} 次出行",
+    clashTag: "日期重叠", clashTitle: "和{list}的日期重叠，可能填错了", exampleTag: "示例",
+    fromBase: "从{name}出发", via: "经由 {list}", listSep: "、", edit: "编辑", del: "删除", editOf: "编辑 {name}", delOf: "删除 {name}",
+    footLocal: "数据只保存在这个浏览器里", footUnsaved: "上次导出后有 {n} 处改动还没备份", footNever: "数据只在这个浏览器里，还没导出过备份",
+    footSaved: "已备份 · 上次导出 {d}", discard: "放弃修改？再按一次", picking: "点击地球选择…（Esc 取消）", pick: "在地球上点选",
+    editTitle: "编辑地点", addTitle: "添加地点", place: "地点", placePh: "输入城市名，如 京都 / 東京 / Kyoto", candidates: "候选城市",
+    coord: "坐标", coordMissing: "从候选城市中选择，或在地球上点选", country: "国家/地区", countryPh: "选好地点后自动填写，可修改",
+    from: "开始", fromPh: "如 2026-8-12 或 20260812", to: "结束", toPh: "不填就是当天往返",
+    dateHelp: "结束不填表示当天往返；记不清可以只写到月或年，比如 2026-8 或 2026",
+    viaLabel: "经由（可选）", viaPh: "途经的城市，选中就添加，可以加多个", viaRemove: "去掉经由 {name}", viaChip: "经由 {name}，第 {i} 个，共 {n} 个。左右方向键调整顺序", viaDrag: "拖动可以调整顺序",
+    note: "备注（可选）", notePh: "在这里做了什么，一句话就好", delStop: "删除这个地点", save: "保存",
+    noMatchPick: "内置城市里没有「{q}」", pickOnGlobe: "在地球上点选位置 →", noMatch: "内置城市里没有「{q}」", tryAnother: "换个写法试试",
+    here: "这里", route: "路线：{list}", viaHome: "经由 {list} 到{name}，接在主线上", inBase: "这段时间落在「{name}」里，会算作从那里出发的出行",
+    overlap: "注意：和{list}的日期重叠，确认一下有没有填错。",
+    errName: "请填写地点名称。", errCoord: "还没有坐标：从候选城市里选一个，或点「在地球上点选」。",
+    errFrom: "请填写开始日期，比如 2026-8-12。", errFromBad: "看不懂这个日期。可以写 2026-8-12、2026-8 或 2026。",
+    errToBad: "看不懂这个日期。可以写 2026-8-15、2026-8 或 2026。", errOrder: "结束日期早于开始日期。",
+    errVia: "内置城市里没有「{q}」，换个写法，或者清空输入框。",
+    saved: "已保存", noStorage: "浏览器不允许保存数据（可能是无痕模式），刷新后会丢失，记得导出", undone: "已撤销", undo: "撤销",
+    deleted: "已删除「{name}」", examplesCleared: "示例已清除", nothingToExport: "还没有可导出的地点", fileName: "人生",
+    exported: "已导出 {name}", badFile: "读不懂这个文件，请选择从这里导出的 .json", emptyFile: "文件里没有可用的地点",
+    imported: "已导入 {n} 个地点", collapseList: "收起列表", expandList: "展开列表", clickGlobe: "请点在地球上",
+  },
+  en: {
+    title: "Life", globeLabel: "A globe marking the places in your life. Drag or use the arrow keys to turn it, scroll or +/− to zoom. The list of places is on the right.",
+    dockLabel: "Globe controls", spin: "Spin", light: "Light up",
+    langBtn: "中文", panelLabel: "Your places", panelTitle: "Footprints", add: "Add place", export: "Export", import: "Import",
+    present: "Present", notYet: "Not yet", days: "{n} days", day: "1 day", years: "{n} yr", months: "{n} mo",
+    loading: "Loading your places…", noStops: "No places yet",
+    statYears: "<b>{n}</b> yrs", statCities: "<b>{n}</b> cities", statCountries: "<b>{n}</b> countries",
+    importAsk: "The file has {n} places. Importing replaces the {m} you have now.", importExportFirst: "Export mine first, then replace", importGo: "Replace", cancel: "Cancel",
+    exampleBanner: "Places marked “Example” are a demo. Once you add your own, you can clear them in one go.", clearExamples: "Clear {n} examples",
+    emptyTitle: "Start with your first place", emptyBody: "Press “Add place” at the top right and enter a city and when you were there. Each place becomes a light on the globe, joined to the one before it by a line.", seeExamples: "Show an example",
+    foldOpen: "Show the {n} trips from {name}", foldClose: "Hide the {n} trips from {name}",
+    tripTag: "Trip", tripTitle: "Falls within your time in {name}, so it counts as a trip from there", tripsTag: "{n} trips",
+    clashTag: "Dates overlap", clashTitle: "Overlaps with {list}; the dates may be wrong", exampleTag: "Example",
+    fromBase: "From {name}", via: "via {list}", listSep: ", ", edit: "Edit", del: "Delete", editOf: "Edit {name}", delOf: "Delete {name}",
+    footLocal: "Your data stays in this browser", footUnsaved: "{n} changes since your last export", footNever: "Only in this browser; never exported",
+    footSaved: "Backed up · last export {d}", discard: "Discard changes? Press again", picking: "Click the globe… (Esc to cancel)", pick: "Pick on the globe",
+    editTitle: "Edit place", addTitle: "Add place", place: "Place", placePh: "City name, e.g. Kyoto / 京都 / 東京", candidates: "Matching cities",
+    coord: "Coordinates", coordMissing: "Pick a city from the list, or click on the globe", country: "Country", countryPh: "Filled in once you pick a place; you can change it",
+    from: "From", fromPh: "e.g. 2026-8-12 or 20260812", to: "To", toPh: "Leave empty for a day trip",
+    dateHelp: "Leave “To” empty for a day trip. If you don’t remember the day, the month or year is enough, e.g. 2026-8 or 2026",
+    viaLabel: "Via (optional)", viaPh: "Cities passed on the way; pick one to add it, as many as you like", viaRemove: "Remove {name}", viaChip: "Via {name}, {i} of {n}. Use the left and right arrow keys to reorder", viaDrag: "Drag to reorder",
+    note: "Note (optional)", notePh: "What you did there, in a line", delStop: "Delete this place", save: "Save",
+    noMatchPick: "No listed city called “{q}”", pickOnGlobe: "Pick it on the globe →", noMatch: "No listed city called “{q}”", tryAnother: "Try another spelling",
+    here: "here", route: "Route: {list}", viaHome: "Via {list} to {name}, on the main line", inBase: "Falls within your time in {name}, so it counts as a trip from there",
+    overlap: "Note: the dates overlap with {list}. Check they are right.",
+    errName: "Enter a place name.", errCoord: "No coordinates yet: pick a city from the list, or use “Pick on the globe”.",
+    errFrom: "Enter a start date, e.g. 2026-8-12.", errFromBad: "That date isn’t clear. Try 2026-8-12, 2026-8 or 2026.",
+    errToBad: "That date isn’t clear. Try 2026-8-15, 2026-8 or 2026.", errOrder: "The end date is before the start date.",
+    errVia: "No listed city called “{q}”. Try another spelling, or clear the box.",
+    saved: "Saved", noStorage: "This browser won’t keep data (private mode?). It will be lost on reload; export it.", undone: "Undone", undo: "Undo",
+    deleted: "Deleted “{name}”", examplesCleared: "Examples cleared", nothingToExport: "Nothing to export yet", fileName: "life",
+    exported: "Exported {name}", badFile: "Can’t read this file. Choose a .json exported from here.", emptyFile: "No usable places in this file",
+    imported: "Imported {n} places", collapseList: "Hide the list", expandList: "Show the list", clickGlobe: "Click on the globe",
+  },
+};
+// Saved choice; otherwise people who already have places keep Chinese, and newcomers follow the browser.
+let LANG = (() => {
+  try {
+    const v = localStorage.getItem(LANG_KEY);
+    if (v === "zh" || v === "en") return v;
+    if (localStorage.getItem("lifelines.stops.v1")) return "zh";
+  } catch {}
+  return /^(zh|ja)/i.test(navigator.language || "") ? "zh" : "en";
+})();
+function t(key, vars) {
+  const v = I18N[LANG][key] ?? I18N.zh[key];
+  return vars ? v.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "") : v;
+}
+const listOf = names => names.join(t("listSep"));
+
+// Dates keep the precision they were typed with: "2026", "2026-08" or "2026-08-12".
+// For comparing, a start counts from its first day and an end through its last day.
+const pad2 = n => String(n).padStart(2, "0");
+const daysIn = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+function todayISO() { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function parseDate(str) {
+  // digits only: 20260812 -> 2026-08-12, 202608 -> 2026-08
+  const raw = String(str || "").trim().replace(/^(\d{4})(\d{2})(\d{2})?$/, (_, y, mo, d) => d ? `${y}-${mo}-${d}` : `${y}-${mo}`);
+  const m = raw.match(/^(\d{4})(?:\s*[-./年]\s*(\d{1,2})(?:\s*[-./月]\s*(\d{1,2}))?)?\s*[年月日号]?$/);
+  if (!m) return null;
+  const y = +m[1];
+  if (y < 1900 || y > 2100) return null;
+  if (!m[2]) return m[1];
+  const mo = +m[2];
+  if (mo < 1 || mo > 12) return null;
+  if (!m[3]) return `${m[1]}-${pad2(mo)}`;
+  const d = +m[3];
+  if (d < 1 || d > daysIn(y, mo)) return null;
+  return `${m[1]}-${pad2(mo)}-${pad2(d)}`;
+}
+const startDay = d => d.length === 4 ? `${d}-01-01` : d.length === 7 ? `${d}-01` : d;
+function endDay(d) {
+  if (d.length === 4) return `${d}-12-31`;
+  if (d.length === 7) return `${d}-${pad2(daysIn(+d.slice(0, 4), +d.slice(5, 7)))}`;
+  return d;
+}
+const dayNum = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
+// first and last day both count, so 8.12 — 8.15 is 4 days
+const spanDays = (from, to) => dayNum(to ? endDay(to) : todayISO()) - dayNum(startDay(from)) + 1;
+const fmtDate = d => d ? d.replace(/-/g, ".") : t("present");
+// a stop with the same start and end is a single trip (e.g. a day out), shown as one date
+const fmtRange = s => s.to === s.from ? fmtDate(s.from) : `${fmtDate(s.from)} — ${fmtDate(s.to)}`;
+const rangeOf = s => [startDay(s.from), s.to ? endDay(s.to) : todayISO()];
+function overlaps(a, b) { const [a0, a1] = rangeOf(a), [b0, b1] = rangeOf(b); return a0 <= b1 && b0 <= a1; }
+function fmtDur(s) {
+  const n = spanDays(s.from, s.to);
+  if (n < 1) return t("notYet");
+  if (n < 60) return n === 1 && LANG === "en" ? t("day") : t("days", { n });
+  const mo = Math.round(n / 30.44), y = Math.floor(mo / 12), m = mo % 12;
+  return [y ? t("years", { n: y }) : "", m ? t("months", { n: m }) : ""].filter(Boolean).join(" ");
+}
+function fmtCoord(lat, lon) {
+  return `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}  ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? "E" : "W"}`;
+}
+const countryCache = new Map();
+function countryFeature(lon, lat) {
+  const k = `${lon.toFixed(3)},${lat.toFixed(3)}`;
+  if (countryCache.has(k)) return countryCache.get(k);
+  const f = countries.find(c => d3.geoContains(c, [lon, lat])) || null;
+  countryCache.set(k, f);
+  return f;
+}
+// Coastal cities often sit just off the simplified coastline, so look a little way around.
+function countryNear(lon, lat) {
+  const f = countryFeature(lon, lat);
+  if (f) return f;
+  const k = `near:${lon.toFixed(3)},${lat.toFixed(3)}`;
+  if (countryCache.has(k)) return countryCache.get(k);
+  let hit = null;
+  for (const r of [0.08, 0.2, 0.4]) {
+    for (let a = 0; a < 360 && !hit; a += 45) {
+      const t = a * Math.PI / 180;
+      hit = countryFeature(lon + r * Math.cos(t) / Math.max(.2, Math.cos(lat * Math.PI / 180)), lat + r * Math.sin(t));
+    }
+    if (hit) break;
+  }
+  countryCache.set(k, hit);
+  return hit;
+}
+// One key per country however it was written: 日本 / Japan / the map's own name.
+// Taiwan, Hong Kong and Macau count as China.
+const COUNTRY_KEY = new Map();
+for (const [zh, al] of Object.entries(COUNTRY_ALIASES)) {
+  const key = zh.startsWith("中国") ? "中国" : zh;
+  for (const n of [zh, ...al.split("|")]) COUNTRY_KEY.set(n.toLowerCase(), key);
+}
+// English names of the countries the world city list brought in (格鲁吉亚 = Georgia)
+for (const [zh, en] of Object.entries(WORLD_PLACES.countries)) {
+  if (!COUNTRY_KEY.has(en.toLowerCase())) COUNTRY_KEY.set(en.toLowerCase(), COUNTRY_KEY.get(zh.toLowerCase()) || zh);
+  if (!COUNTRY_KEY.has(zh.toLowerCase())) COUNTRY_KEY.set(zh.toLowerCase(), zh);
+}
+function nationOf(s) {
+  const typed = String(s.country || "").trim();
+  if (COUNTRY_KEY.has(typed.toLowerCase())) return COUNTRY_KEY.get(typed.toLowerCase());
+  if (typed) return typed;
+  const f = countryNear(+s.lon, +s.lat);
+  if (f) return COUNTRY_KEY.get(f.properties.name.toLowerCase()) || f.properties.name;
+  const g = nearestCity(+s.lon, +s.lat);
+  return g ? COUNTRY_KEY.get(g.country.toLowerCase()) || g.country : s.name;
+}
+// for a spot out at sea: the closest listed city, if it is within about 300 km
+function nearestCity(lon, lat) {
+  let best = null, bd = 0.047;
+  for (const g of GAZ) { const d = d3.geoDistance([g.lon, g.lat], [lon, lat]); if (d < bd) { bd = d; best = g; } }
+  return best;
+}
+let toastTimer;
+function toast(msg, undoable) {
+  const t = $("toast");
+  t.textContent = msg;
+  if (undoable) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = t("undo");
+    b.onclick = undo;
+    t.append(b);
+  } else undoSnap = null;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove("on"); if (undoable) undoSnap = null; }, undoable ? 7000 : 2600);
+}
+
+/* ---------- Derived data ---------- */
+// The automatic base of an outing: the shortest other stop whose time range holds it.
+function autoBase(me, exclude) {
+  const end = s => s.to ? endDay(s.to) : todayISO();
+  const myEnd = end(me), span = spanDays(me.from, me.to);
+  let base = null;
+  for (const o of S.stops) {
+    if (o.id === exclude || startDay(o.from) > startDay(me.from) || end(o) < myEnd || spanDays(o.from, o.to) <= span) continue;
+    if (!base || spanDays(o.from, o.to) < spanDays(base.from, base.to)) base = o;
+  }
+  return base;
+}
+
+// Cities passed through on the way, in order. Older saves had a single s.via.
+const viasOf = s => Array.isArray(s.vias) ? s.vias : s.via ? [s.via] : [];
+
+function rebuild() {
+  const end = s => s.to ? endDay(s.to) : todayISO();
+  S.stops = S.items
+    .filter(s => isFinite(s.lat) && isFinite(s.lon) && s.from)
+    .sort((a, b) => startDay(a.from).localeCompare(startDay(b.from)) || end(a).localeCompare(end(b)));
+  // A stop whose whole time range sits inside a longer stop is an outing from that base:
+  // it gets a round-trip arc from its base instead of joining the main line of homes.
+  // Ongoing stops (至今) always count as homes.
+  S.baseOf = new Map();
+  for (const s of S.stops) {
+    if (!s.to) continue;
+    const base = autoBase(s, s.id);
+    if (base) S.baseOf.set(s.id, base);
+  }
+  S.arcs = [];
+  // the line from where you set out runs through each city passed on the way (京都 → 成都 → 广元)
+  const route = (from, s, trip) => {
+    let prev = from;
+    for (const v of viasOf(s)) { if (prev) addArc(prev, v, trip); prev = v; }
+    if (prev) addArc(prev, s, trip);
+  };
+  const homes = S.stops.filter(s => !S.baseOf.has(s.id));
+  for (let i = 0; i < homes.length; i++) route(homes[i - 1] || null, homes[i], false);
+  for (const s of S.stops) if (S.baseOf.has(s.id)) route(S.baseOf.get(s.id), s, true);
+  const map = new Map();
+  S.stops.forEach((s, i) => {
+    const k = placeKey(s);
+    if (!map.has(k)) map.set(k, { key: k, lat: +s.lat, lon: +s.lon, stops: [] });
+    map.get(k).stops.push({ s, i });
+  });
+  S.places = [...map.values()];
+  S.lit = null;
+  // departure cities that aren't stops themselves get a small hollow mark
+  S.vias = [...new Map(S.stops.flatMap(viasOf).filter(v => !map.has(placeKey(v))).map(v => [placeKey(v), v])).values()];
+  renderStats();
+  renderPanel();
+}
+
+function addArc(a, b, trip) {
+  const d = d3.geoDistance([a.lon, a.lat], [b.lon, b.lat]);
+  if (d < 0.002) return;
+  const interp = d3.geoInterpolate([a.lon, a.lat], [b.lon, b.lat]);
+  const n = clamp(Math.ceil(d * DEG / 1.5), 20, 120);
+  const hMax = clamp(d * (trip ? 0.08 : 0.1), 0.006, 0.13);
+  const pts = [];
+  for (let j = 0; j <= n; j++) {
+    const t = j / n;
+    const [lon, lat] = interp(t);
+    pts.push([lon, lat, hMax * Math.sin(Math.PI * t)]);
+  }
+  S.arcs.push({ trip, pts, dist: d, seed: (S.arcs.length * 0.618) % 1 });
+}
+
+function renderStats() {
+  const st = S.stops;
+  if (!st.length) { $("stats").innerHTML = S.mode === "loading" ? `<span>${t("loading")}</span>` : `<span>${t("noStops")}</span>`; return; }
+  const cities = new Set(st.map(s => placeKey(s))).size;
+  const nations = new Set(st.map(nationOf)).size;
+  const first = st[0].from.slice(0, 4);
+  const lastTo = st.some(s => !s.to) ? null : st.reduce((m, s) => endDay(s.to) > m ? endDay(s.to) : m, "0000");
+  const yrs = Math.max(1, Math.round(spanDays(st[0].from, lastTo) / 365.25));
+  $("stats").innerHTML =
+    `<span>${first} — ${lastTo ? lastTo.slice(0, 4) : t("present")}</span>` +
+    `<span>${t("statYears", { n: yrs })}</span><span>${t("statCities", { n: cities })}</span><span>${t("statCountries", { n: nations })}</span>`;
+}
+
+/* ---------- Panel ---------- */
+// The panel is rebuilt with innerHTML, so note what had focus and put it back afterwards.
+function focusKey() {
+  const el = document.activeElement;
+  if (!el || !$("panel").contains(el)) return null;
+  const li = el.closest(".stop");
+  return { id: el.id || null, stop: li ? li.dataset.id : null, act: el.dataset.act || null };
+}
+function restoreFocus(k) {
+  if (!k) return;
+  let el = null;
+  if (k.stop && k.act) el = $("p-body").querySelector(`.stop[data-id="${CSS.escape(k.stop)}"] [data-act="${k.act}"]`);
+  else if (k.id) el = $(k.id);
+  if (el && !el.hidden && !el.disabled) el.focus({ preventScroll: true });
+}
+
+// Outings fold under the stop they left from, like files in a folder. Folding a stop hides
+// every outing under it (outings inside outings too) from the list; the globe still shows them.
+const FOLD_KEY = "lifelines.fold.v1";
+S.folded = (() => { try { return new Set(JSON.parse(localStorage.getItem(FOLD_KEY) || "[]")); } catch { return new Set(); } })();
+function saveFolded() { try { localStorage.setItem(FOLD_KEY, JSON.stringify([...S.folded])); } catch {} }
+// a stop just picked or saved must be visible, so open the folders above it
+function reveal(s) {
+  if (!s || !basesOf(s).some(b => S.folded.has(b.id))) return false;
+  basesOf(s).forEach(b => S.folded.delete(b.id));
+  saveFolded();
+  return true;
+}
+function basesOf(s) { const out = []; for (let b = S.baseOf.get(s.id); b; b = S.baseOf.get(b.id)) out.push(b); return out; }
+
+function renderPanel() {
+  const keep = S.focusNext || focusKey();
+  S.focusNext = null;
+  $("count").textContent = $("tab-count").textContent = S.stops.length ? String(S.stops.length) : "";
+  $("btn-add").hidden = !S.canEdit || !!S.editing;
+  renderFoot();
+  const body = $("p-body");
+  if (S.editing) { renderForm(body); restoreFocus(keep); return; }
+  if (S.mode === "loading") { body.innerHTML = `<div class="empty"><span>${t("loading")}</span></div>`; return; }
+  let html = "";
+  if (S.pendingImport) {
+    html += `<div class="banner" role="group" aria-labelledby="imp-msg">
+      <span id="imp-msg">${t("importAsk", { n: S.pendingImport.length, m: S.items.length })}</span>
+      <span class="banner-btns">
+        <button type="button" class="link-btn" id="imp-export">${t("importExportFirst")}</button>
+        <button type="button" class="link-btn" id="imp-go">${t("importGo")}</button>
+        <button type="button" class="icon-btn" id="imp-cancel">${t("cancel")}</button>
+      </span>
+    </div>`;
+  }
+  const examples = S.items.filter(s => s.example);
+  if (examples.length && S.canEdit && !S.pendingImport) {
+    html += `<div class="banner"><span>${t("exampleBanner")}</span><span class="banner-btns"><button type="button" class="link-btn" id="clear-ex">${t("clearExamples", { n: examples.length })}</button></span></div>`;
+  }
+  if (!S.stops.length) {
+    html += `<div class="empty"><strong>${t("emptyTitle")}</strong><span>${t("emptyBody")}</span><button type="button" class="link-btn" id="load-ex" style="justify-self:start">${t("seeExamples")}</button></div>`;
+    body.innerHTML = html;
+    bindPanel();
+    restoreFocus(keep);
+    return;
+  }
+  // a tree: homes in time order, each followed by its outings (and their outings), indented
+  const kids = new Map();
+  S.stops.forEach(s => {
+    const k = S.baseOf.get(s.id)?.id ?? "";
+    if (!kids.has(k)) kids.set(k, []);
+    kids.get(k).push(s);
+  });
+  const count = id => (kids.get(id) || []).reduce((n, c) => n + 1 + count(c.id), 0);
+  // outings from the same place whose dates overlap were probably typed wrong
+  const clash = new Map();
+  kids.forEach((list, k) => {
+    if (!k) return;
+    list.forEach((a, i) => list.slice(i + 1).forEach(b => {
+      if (!overlaps(a, b)) return;
+      clash.set(a.id, [...(clash.get(a.id) || []), b]);
+      clash.set(b.id, [...(clash.get(b.id) || []), a]);
+    }));
+  });
+  const rows = [];
+  // anc[l] says whether the line at level l carries on below this row
+  const walk = (list, anc) => list.forEach((s, i) => {
+    const more = i < list.length - 1;
+    rows.push({ s, depth: anc.length, anc, first: i === 0, more });
+    if (kids.has(s.id) && !S.folded.has(s.id)) walk(kids.get(s.id), anc.concat(more));
+  });
+  walk(kids.get("") || [], []);
+  html += `<ol class="stops">`;
+  rows.forEach(({ s, depth, anc, first, more }) => {
+    const n = count(s.id), folded = S.folded.has(s.id);
+    const country = s.country || nationOf(s);
+    const base = S.baseOf.get(s.id);
+    const guides = anc.map((on, l) => on ? `<i class="guide" style="--l:${l}"></i>` : "").join("")
+      + (first ? "" : `<i class="guide up" style="--l:${depth}"></i>`)
+      + (more ? `<i class="guide down" style="--l:${depth}"></i>` : "");
+    html += `<li class="stop${s.id === S.selected ? " sel" : ""}${!s.to ? " now" : ""}${base ? " trip" : ""}" data-id="${esc(s.id)}" style="--d:${depth}">
+      ${guides}
+      ${n ? `<button type="button" class="stop-tog" data-act="fold" aria-expanded="${!folded}" aria-label="${esc(t(folded ? "foldOpen" : "foldClose", { name: s.name, n }))}">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2 7 5 3.5 8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>` : ""}
+      <button type="button" class="stop-main" data-act="go">
+        <span class="stop-rail"><span class="dot"></span></span>
+        <span class="stop-body">
+          <span class="stop-when">${fmtRange(s)} <em>· ${fmtDur(s)}</em></span>
+          <span class="stop-place">${esc(s.name)}${base ? `<span class="tag" title="${esc(t("tripTitle", { name: base.name }))}">${t("tripTag")}</span>` : ""}${folded ? `<span class="tag">${t("tripsTag", { n })}</span>` : ""}${clash.has(s.id) ? `<span class="tag warn" title="${esc(t("clashTitle", { list: listOf(clash.get(s.id).map(o => `${o.name} (${fmtRange(o)})`)) }))}">${t("clashTag")}</span>` : ""}${s.example ? `<span class="tag">${t("exampleTag")}</span>` : ""}</span>
+          <span class="stop-meta">${base ? `${esc(t("fromBase", { name: base.name }))} · ` : ""}${viasOf(s).length ? `${esc(t("via", { list: listOf(viasOf(s).map(v => v.name)) }))} · ` : ""}${esc(country)}${country ? " · " : ""}${fmtCoord(+s.lat, +s.lon)}</span>
+          ${s.note ? `<span class="stop-note">${esc(s.note)}</span>` : ""}
+        </span>
+      </button>
+      ${S.canEdit ? `<span class="stop-actions">
+        <button type="button" class="icon-btn" data-act="edit" aria-label="${esc(t("editOf", { name: s.name }))}">${t("edit")}</button>
+        <button type="button" class="icon-btn" data-act="del" aria-label="${esc(t("delOf", { name: s.name }))}">${t("del")}</button>
+      </span>` : ""}
+    </li>`;
+  });
+  html += `</ol>`;
+  body.innerHTML = html;
+  bindPanel();
+  restoreFocus(keep);
+}
+
+function bindPanel() {
+  const on = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
+  on("clear-ex", clearExamples);
+  on("load-ex", loadExamples);
+  on("imp-export", () => { exportData(); applyImport(); });
+  on("imp-go", applyImport);
+  on("imp-cancel", cancelImport);
+  $("p-body").querySelectorAll(".stop").forEach(li => {
+    const id = li.dataset.id;
+    li.addEventListener("mouseenter", () => { S.hoverId = id; });
+    li.addEventListener("mouseleave", () => { if (S.hoverId === id) S.hoverId = null; });
+    li.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", e => {
+      e.stopPropagation();
+      const s = S.stops.find(x => x.id === id);
+      if (!s) return;
+      const act = b.dataset.act;
+      if (act === "go") selectStop(s.id, true);
+      else if (act === "edit") openForm(s);
+      else if (act === "del") deleteStop(id);
+      else if (act === "fold") {
+        if (!S.folded.delete(id)) S.folded.add(id);
+        saveFolded();
+        S.focusNext = { stop: id, act: "fold" };
+        renderPanel();
+      }
+    }));
+  });
+}
+
+function selectStop(id, fly) {
+  S.selected = id;
+  const s = S.stops.find(x => x.id === id);
+  reveal(s);
+  renderPanel();
+  if (s && fly) flyTo(s.lon, s.lat);
+  const li = $("p-body").querySelector(`.stop[data-id="${CSS.escape(id)}"]`);
+  if (li) li.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+}
+
+function renderFoot() {
+  const own = S.items.some(s => !s.example);
+  const st = $("foot-status");
+  let text = t("footLocal"), warn = false;
+  if (own && META.changes > 0) {
+    text = META.lastExport ? t("footUnsaved", { n: META.changes }) : t("footNever");
+    warn = true;
+  } else if (own && META.lastExport) {
+    text = t("footSaved", { d: META.lastExport.slice(0, 10).replaceAll("-", ".") });
+  }
+  st.textContent = text;
+  st.classList.toggle("warn", warn);
+  $("btn-export").classList.toggle("em", warn);
+}
+
+/* ---------- Form ---------- */
+function openForm(s) {
+  S.editing = s ? {
+    id: s.id, name: s.name, country: s.country || "", lat: +s.lat, lon: +s.lon,
+    from: s.from, to: s.to || "", now: !s.to, vias: viasOf(s).slice(), note: s.note || "", example: !!s.example, gaz: null, dirty: false,
+  } : { id: null, name: "", country: "", lat: null, lon: null, from: "", to: "", now: false, vias: [], note: "", gaz: null, dirty: false };
+  stopPicking();
+  if (isMobile()) setSheet(true);
+  renderPanel();
+  $("f-place").focus();
+}
+function closeForm() {
+  const f = S.editing;
+  S.editing = null;
+  S.cancelArmed = false;
+  stopPicking();
+  S.focusNext = f && f.id && S.stops.some(s => s.id === f.id) ? { stop: f.id, act: "go" } : { id: "btn-add" };
+  renderPanel();
+}
+// Cancel (button or Esc) throws edits away only on a second press.
+function requestCancel() {
+  const f = S.editing;
+  if (!f) return;
+  if (!f.dirty || S.cancelArmed) { closeForm(); return; }
+  S.cancelArmed = true;
+  const b = $("f-cancel");
+  if (b) b.textContent = t("discard");
+  clearTimeout(S.cancelTimer);
+  S.cancelTimer = setTimeout(() => {
+    S.cancelArmed = false;
+    const c = $("f-cancel");
+    if (c) c.textContent = t("cancel");
+  }, 3000);
+}
+function startPicking() {
+  S.picking = true;
+  canvas.classList.add("picking");
+  const b = $("f-pick");
+  if (b) { b.setAttribute("aria-pressed", "true"); b.textContent = t("picking"); }
+  if (isMobile()) setSheet(false);
+}
+function stopPicking() {
+  S.picking = false;
+  canvas.classList.remove("picking");
+  const b = $("f-pick");
+  if (b) { b.setAttribute("aria-pressed", "false"); b.textContent = t("pick"); }
+}
+
+function renderForm(body) {
+  const f = S.editing;
+  const has = f.lat != null;
+  body.innerHTML = `
+  <form class="form" id="form" novalidate autocomplete="off">
+    <h3>${t(f.id ? "editTitle" : "addTitle")}</h3>
+    <div class="field">
+      <label for="f-place">${t("place")}</label>
+      <input class="input" id="f-place" value="${esc(f.name)}" placeholder="${t("placePh")}" role="combobox" aria-expanded="false" aria-controls="f-suggest" aria-autocomplete="list" aria-describedby="err-place">
+      <ul class="suggest" id="f-suggest" role="listbox" aria-label="${t("candidates")}" hidden></ul>
+      <span class="field-err" id="err-place" role="alert"></span>
+    </div>
+    <div class="field">
+      <span class="lbl">${t("coord")}</span>
+      <div class="loc">
+        <span class="loc-val${has ? "" : " missing"}" id="f-coord">${has ? fmtCoord(f.lat, f.lon) : t("coordMissing")}</span>
+        <button type="button" class="link-btn" id="f-pick" aria-pressed="${S.picking}">${t(S.picking ? "picking" : "pick")}</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="f-country">${t("country")}</label>
+      <input class="input" id="f-country" value="${esc(f.country)}" placeholder="${t("countryPh")}">
+    </div>
+    <div class="field">
+      <label for="f-from">${t("from")}</label>
+      <input class="input mono" id="f-from" value="${esc(f.from)}" placeholder="${t("fromPh")}" autocomplete="off" spellcheck="false" aria-describedby="err-from date-help">
+      <span class="field-err" id="err-from" role="alert"></span>
+    </div>
+    <div class="field">
+      <div class="lbl-row">
+        <label for="f-to">${t("to")}</label>
+        <label class="check"><input type="checkbox" id="f-now"${f.now ? " checked" : ""}> ${t("present")}</label>
+      </div>
+      <input class="input mono" id="f-to" value="${esc(f.now ? "" : f.to)}" placeholder="${t(f.now ? "present" : "toPh")}" autocomplete="off" spellcheck="false" aria-describedby="err-to date-help"${f.now ? " disabled" : ""}>
+      <span class="field-err" id="err-to" role="alert"></span>
+      <span class="help" id="date-help">${t("dateHelp")}</span>
+    </div>
+    <div class="field">
+      <label for="f-via">${t("viaLabel")}</label>
+      <div class="vias" id="f-vias"></div>
+      <input class="input" id="f-via" placeholder="${t("viaPh")}" role="combobox" aria-expanded="false" aria-controls="f-via-suggest" aria-autocomplete="list" aria-describedby="err-via f-role" autocomplete="off">
+      <ul class="suggest" id="f-via-suggest" role="listbox" aria-label="${t("candidates")}" hidden></ul>
+      <span class="field-err" id="err-via" role="alert"></span>
+      <span class="help role" id="f-role" aria-live="polite"></span>
+    </div>
+    <div class="field">
+      <label for="f-note">${t("note")}</label>
+      <textarea class="input" id="f-note" rows="2" placeholder="${t("notePh")}">${esc(f.note)}</textarea>
+    </div>
+    <div class="actions">
+      ${f.id ? `<button type="button" class="btn quiet-danger" id="f-del">${t("delStop")}</button>` : ""}
+      <button type="button" class="btn" id="f-cancel">${t("cancel")}</button>
+      <button type="submit" class="btn solid" id="f-save">${t("save")}</button>
+    </div>
+  </form>`;
+
+  const form = $("form"), place = $("f-place"), sug = $("f-suggest");
+  form.addEventListener("input", () => { f.dirty = true; });
+  form.addEventListener("change", () => { f.dirty = true; });
+  let opts = [], active = -1;
+  const closeSug = () => {
+    sug.hidden = true;
+    active = -1;
+    place.setAttribute("aria-expanded", "false");
+    place.removeAttribute("aria-activedescendant");
+  };
+  const showSug = () => {
+    const q = place.value.trim().toLowerCase();
+    f.name = place.value.trim();
+    if (!q) { closeSug(); return; }
+    opts = searchCities(q);
+    active = -1;
+    place.removeAttribute("aria-activedescendant");
+    sug.innerHTML = opts.length
+      ? opts.map((g, i) => `<li role="option" data-i="${i}" id="f-opt-${i}">${suggestHTML(g)}</li>`).join("")
+      : `<li class="nomatch" role="option" id="f-opt-pick" data-pick="1">${esc(t("noMatchPick", { q: place.value.trim() }))}<span>${t("pickOnGlobe")}</span></li>`;
+    sug.hidden = false;
+    place.setAttribute("aria-expanded", "true");
+  };
+  const choose = g => {
+    f.name = cityName(g); f.lat = g.lat; f.lon = g.lon; f.country = countryName(g.country); f.gaz = f.name;
+    place.value = f.name;
+    $("f-country").value = f.country;
+    closeSug();
+    updateCoord();
+    clearErr("place", place);
+    flyTo(g.lon, g.lat);
+    $("f-from").focus();
+  };
+  place.addEventListener("input", () => {
+    // coordinates taken from a listed city no longer apply once the name is changed
+    if (f.gaz && place.value.trim() !== f.gaz) {
+      f.gaz = null; f.lat = null; f.lon = null; f.country = "";
+      $("f-country").value = "";
+      updateCoord();
+    }
+    clearErr("place", place);
+    showSug();
+  });
+  place.addEventListener("keydown", e => {
+    if (sug.hidden) return;
+    const n = opts.length || 1;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      active = (active + (e.key === "ArrowDown" ? 1 : -1) + n) % n;
+      sug.querySelectorAll("li").forEach((li, i) => li.classList.toggle("on", i === active));
+      place.setAttribute("aria-activedescendant", opts.length ? `f-opt-${active}` : "f-opt-pick");
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (opts.length) choose(opts[Math.max(0, active)]);
+      else { closeSug(); startPicking(); }
+    } else if (e.key === "Escape") {
+      e.stopPropagation();
+      closeSug();
+    }
+  });
+  place.addEventListener("blur", () => setTimeout(() => {
+    closeSug();
+    if (f.lat == null) {
+      const q = place.value.trim().toLowerCase();
+      const hit = GAZ.find(g => g.keys.includes(q));
+      if (hit) choose(hit);
+    }
+  }, 160));
+  sug.addEventListener("mousedown", e => {
+    const li = e.target.closest("li");
+    if (!li) return;
+    e.preventDefault();
+    if (li.dataset.pick) { closeSug(); startPicking(); } else choose(opts[+li.dataset.i]);
+  });
+  $("f-pick").onclick = () => { if (S.picking) stopPicking(); else startPicking(); };
+  $("f-country").oninput = e => { f.country = e.target.value; };
+  for (const key of ["from", "to"]) {
+    const el = $(`f-${key}`);
+    el.oninput = () => { f[key] = el.value.trim(); clearErr(key, el); updateRole(); };
+    // tidy what was typed into the stored form once it parses, e.g. 2026/8/12 -> 2026-08-12
+    el.onblur = () => { const d = parseDate(el.value); if (d) { el.value = d; f[key] = d; } };
+  }
+  $("f-note").oninput = e => { f.note = e.target.value; };
+  // departure city: same kind of search box as the place, listed cities only
+  const via = $("f-via"), vsug = $("f-via-suggest");
+  let vopts = [], vactive = -1;
+  const closeVia = () => { vsug.hidden = true; vactive = -1; via.setAttribute("aria-expanded", "false"); via.removeAttribute("aria-activedescendant"); };
+  const renderVias = focusAt => {
+    const n = f.vias.length;
+    $("f-vias").innerHTML = f.vias.map((v, i) => `${i ? `<i class="via-sep" aria-hidden="true">→</i>` : ""}<span class="via-chip" data-k="${i}" tabindex="0" role="group" aria-label="${esc(t("viaChip", { name: v.name, i: i + 1, n }))}" title="${n > 1 ? esc(t("viaDrag")) : ""}">${esc(v.name)}<button type="button" data-i="${i}" aria-label="${esc(t("viaRemove", { name: v.name }))}"><svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><path d="M1.5 1.5l5 5M6.5 1.5l-5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button></span>`).join("")
+      + (n > 1 ? `<span class="via-help">${t("viaDrag")}</span>` : "");
+    if (focusAt != null) $("f-vias").querySelector(`.via-chip[data-k="${focusAt}"]`)?.focus();
+    updateRole();
+  };
+  const moveVia = (from, to) => {
+    if (to === from || to < 0 || to >= f.vias.length) return;
+    const [v] = f.vias.splice(from, 1);
+    f.vias.splice(to, 0, v);
+    f.dirty = true;
+  };
+  // keyboard: ← / → on a focused chip moves it
+  $("f-vias").addEventListener("keydown", e => {
+    const chip = e.target.closest(".via-chip");
+    if (!chip || e.target !== chip || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    e.preventDefault();
+    const i = +chip.dataset.k, to = i + (e.key === "ArrowRight" ? 1 : -1);
+    if (to < 0 || to >= f.vias.length) return;
+    moveVia(i, to);
+    renderVias(to);
+  });
+  // pointer: drag a chip; a bar shows where it will land
+  let drag = null;
+  const chipsOf = () => [...$("f-vias").querySelectorAll(".via-chip")];
+  const clearMarks = () => chipsOf().forEach(c => c.classList.remove("drop-before", "drop-after"));
+  const endDrag = commit => {
+    if (!drag) return;
+    const { from, to, ghost, chip } = drag;
+    ghost?.remove();
+    chip.classList.remove("is-dragging");
+    clearMarks();
+    drag = null;
+    if (commit && to != null) {
+      const dest = to > from ? to - 1 : to;
+      moveVia(from, dest);
+      renderVias(dest);
+    }
+  };
+  $("f-vias").addEventListener("pointerdown", e => {
+    const chip = e.target.closest(".via-chip");
+    if (!chip || e.target.closest("button") || e.button !== 0 || f.vias.length < 2) return;
+    drag = { from: +chip.dataset.k, chip, x: e.clientX, y: e.clientY, to: null, ghost: null };
+    chip.setPointerCapture(e.pointerId);
+  });
+  $("f-vias").addEventListener("pointermove", e => {
+    if (!drag) return;
+    if (!drag.ghost) {
+      if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 4) return;
+      const r = drag.chip.getBoundingClientRect();
+      drag.dx = drag.x - r.left; drag.dy = drag.y - r.top;
+      drag.ghost = drag.chip.cloneNode(true);
+      drag.ghost.className = "via-chip via-ghost";
+      drag.ghost.removeAttribute("tabindex");
+      drag.ghost.setAttribute("aria-hidden", "true");
+      document.body.appendChild(drag.ghost);
+      drag.chip.classList.add("is-dragging");
+    }
+    drag.ghost.style.left = `${e.clientX - drag.dx}px`;
+    drag.ghost.style.top = `${e.clientY - drag.dy}px`;
+    // landing spot: before the first chip the pointer is ahead of (earlier row, or same row and left of its middle)
+    const chips = chipsOf();
+    let to = chips.length;
+    for (const [k, c] of chips.entries()) {
+      const r = c.getBoundingClientRect();
+      if (e.clientY < r.top || (e.clientY <= r.bottom && e.clientX < r.left + r.width / 2)) { to = k; break; }
+    }
+    drag.to = to === drag.from || to === drag.from + 1 ? null : to;
+    clearMarks();
+    if (drag.to != null) (drag.to < chips.length ? chips[drag.to] : chips[chips.length - 1]).classList.add(drag.to < chips.length ? "drop-before" : "drop-after");
+  });
+  $("f-vias").addEventListener("pointerup", () => endDrag(true));
+  $("f-vias").addEventListener("pointercancel", () => endDrag(false));
+  $("f-vias").addEventListener("keydown", e => { if (e.key === "Escape" && drag) { e.stopPropagation(); endDrag(false); } }, true);
+  $("f-vias").addEventListener("click", e => {
+    const b = e.target.closest("button[data-i]");
+    if (!b) return;
+    f.vias.splice(+b.dataset.i, 1);
+    f.dirty = true;
+    renderVias();
+    via.focus();
+  });
+  const chooseVia = g => {
+    f.vias.push({ name: cityName(g), lat: g.lat, lon: g.lon });
+    f.dirty = true;
+    via.value = "";
+    closeVia();
+    clearErr("via", via);
+    renderVias();
+  };
+  renderVias();
+  via.addEventListener("input", () => {
+    const q = via.value.trim().toLowerCase();
+    clearErr("via", via);
+    if (!q) { closeVia(); return; }
+    vopts = searchCities(q);
+    vactive = -1;
+    vsug.innerHTML = vopts.length
+      ? vopts.map((g, i) => `<li role="option" data-i="${i}" id="f-via-opt-${i}">${suggestHTML(g)}</li>`).join("")
+      : `<li class="nomatch" role="option">${esc(t("noMatch", { q: via.value.trim() }))}<span>${t("tryAnother")}</span></li>`;
+    vsug.hidden = false;
+    via.setAttribute("aria-expanded", "true");
+  });
+  via.addEventListener("keydown", e => {
+    if (vsug.hidden || !vopts.length) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      vactive = (vactive + (e.key === "ArrowDown" ? 1 : -1) + vopts.length) % vopts.length;
+      vsug.querySelectorAll("li").forEach((li, i) => li.classList.toggle("on", i === vactive));
+      via.setAttribute("aria-activedescendant", `f-via-opt-${vactive}`);
+    } else if (e.key === "Enter") { e.preventDefault(); chooseVia(vopts[Math.max(0, vactive)]); }
+    else if (e.key === "Escape") { e.stopPropagation(); closeVia(); }
+  });
+  via.addEventListener("blur", () => setTimeout(() => {
+    closeVia();
+    if (via.value.trim()) {
+      const hit = GAZ.find(g => g.keys.includes(via.value.trim().toLowerCase()));
+      if (hit) chooseVia(hit);
+    }
+  }, 160));
+  vsug.addEventListener("mousedown", e => {
+    const li = e.target.closest("li[data-i]");
+    if (!li) return;
+    e.preventDefault();
+    chooseVia(vopts[+li.dataset.i]);
+  });
+  $("f-now").onchange = e => {
+    f.now = e.target.checked;
+    $("f-to").disabled = f.now;
+    $("f-to").placeholder = t(f.now ? "present" : "toPh");
+    if (f.now) $("f-to").value = "";
+    clearErr("to", $("f-to"));
+    updateRole();
+  };
+  $("f-cancel").onclick = requestCancel;
+  if ($("f-del")) $("f-del").onclick = () => { const id = f.id; S.editing = null; stopPicking(); deleteStop(id); };
+  form.onsubmit = e => { e.preventDefault(); submitForm(); };
+  updateRole();
+}
+
+// names in the current language: English pages store and show English names
+const cityName = g => LANG === "en" ? g.en : g.zh;
+function countryName(zh) {
+  if (LANG !== "en" || !zh) return zh;
+  const key = COUNTRY_KEY.get(String(zh).toLowerCase()) || zh;
+  const en = WORLD_PLACES.countries[key] || (COUNTRY_ALIASES[key] || "").split("|").find(a => /^[A-Za-z][A-Za-z .'-]+$/.test(a));
+  return en || zh;
+}
+function suggestHTML(g) {
+  const main = cityName(g), other = LANG === "en" ? g.zh : g.en;
+  return `${esc(main)}<span>${esc(other)}${g.region ? ` · ${esc(g.region)}` : ""} · ${esc(countryName(g.country))}</span>`;
+}
+
+function applyLang() {
+  document.documentElement.lang = LANG === "en" ? "en" : "zh-CN";
+  document.title = t("title");
+  document.querySelectorAll("[data-t]").forEach(el => { el.textContent = t(el.dataset.t); });
+  document.querySelectorAll("[data-t-aria]").forEach(el => el.setAttribute("aria-label", t(el.dataset.tAria)));
+  $("btn-lang").textContent = t("langBtn");
+  $("btn-lang").setAttribute("lang", LANG === "en" ? "zh-CN" : "en");
+}
+function setLang(lang) {
+  LANG = lang;
+  try { localStorage.setItem(LANG_KEY, lang); } catch {}
+  applyLang();
+  renderStats();
+  renderPanel();
+}
+
+function searchCities(q) {
+  // 「徳島県」「大阪府」「德岛县」: also try without the trailing unit
+  const qs = q.length > 2 && /[县縣県府省市]$/.test(q) ? [q, q.slice(0, -1)] : [q];
+  const scoreOf = (g, q) => g.keys.includes(q) ? 0
+    // a country's own name ("中国", "Malta") lists its cities before names that merely start with it
+    : g.ckeys.includes(q) ? 0.5
+    : g.keys.some(k => k.startsWith(q)) ? 1
+    : g.keys.some(k => k.includes(q)) ? 3
+    : g.ckeys.some(k => k === q || (q.length >= 2 && k.startsWith(q))) ? 4
+    // a state or province name ("California") lists its cities
+    : g.rkey && (g.rkey === q || (q.length >= 3 && g.rkey.startsWith(q))) ? 5 : 9;
+  // bigger places first among equals; cities without a figure keep their listed order after them
+  const pop = g => g.pop ?? 0;
+  return GAZ.map(g => ({ g, score: Math.min(...qs.map(x => scoreOf(g, x))) })).filter(o => o.score < 9).sort((a, b) => a.score - b.score || pop(b.g) - pop(a.g)).slice(0, 8).map(o => o.g);
+}
+
+// Tell the user, while they pick dates, whether this stop will count as an outing from another one.
+function updateRole() {
+  const el = $("f-role"), f = S.editing;
+  if (!el || !f) return;
+  const from = parseDate($("f-from").value), toRaw = $("f-to").value.trim();
+  const to = f.now ? "" : toRaw ? parseDate(toRaw) : from;
+  const me = from && to && endDay(to) >= startDay(from) ? { from, to } : null;
+  const base = me ? autoBase(me, f.id) : null;
+  let text = "", warn = "";
+  const here = ($("f-place").value || "").trim() || t("here");
+  if (f.vias.length && base) text = t("route", { list: [base.name, ...f.vias.map(v => v.name), here].join(" → ") });
+  else if (f.vias.length) text = t("viaHome", { list: f.vias.map(v => v.name).join(" → "), name: here });
+  else if (base) text = t("inBase", { name: base.name });
+  if (base && me) {
+    const hit = S.stops.filter(o => o.id !== f.id && S.baseOf.get(o.id) === base && overlaps(me, o));
+    if (hit.length) warn = t("overlap", { list: listOf(hit.map(o => `${o.name} (${fmtRange(o)})`)) });
+  }
+  el.innerHTML = esc(text) + (warn ? `<span class="role-warn">${esc(warn)}</span>` : "");
+}
+
+function updateCoord() {
+  const f = S.editing, el = $("f-coord");
+  if (!f || !el) return;
+  const has = f.lat != null;
+  el.textContent = has ? fmtCoord(f.lat, f.lon) : t("coordMissing");
+  el.classList.toggle("missing", !has);
+}
+
+function pickAt(lon, lat) {
+  const f = S.editing;
+  f.lat = +lat.toFixed(4); f.lon = +lon.toFixed(4);
+  f.gaz = null;
+  f.dirty = true;
+  const byDist = GAZ.map(g => ({ g, d: d3.geoDistance([g.lon, g.lat], [lon, lat]) })).sort((a, b) => a.d - b.d);
+  const near = byDist[0];
+  // name the country in Chinese when a nearby listed city lies in the same country
+  const c = countryNear(lon, lat);
+  const sameCountry = c && byDist.slice(0, 6).find(o => countryNear(o.g.lon, o.g.lat) === c);
+  f.country = countryName(near.d < 0.004 ? near.g.country : sameCountry ? sameCountry.g.country : c ? c.properties.name : near.d < 0.047 ? near.g.country : "");
+  if (!f.name.trim() && near.d < 0.004) f.name = cityName(near.g);
+  stopPicking();
+  if (isMobile()) setSheet(true);
+  S.focusNext = { id: "f-place" };
+  renderPanel();
+}
+
+function setErr(key, msg, ...els) {
+  $(`err-${key}`).textContent = msg;
+  els.forEach(el => el.setAttribute("aria-invalid", "true"));
+  if (els[0]) els[0].focus();
+}
+function clearErr(key, ...els) {
+  els.forEach(el => el && el.removeAttribute("aria-invalid"));
+  const e = $(`err-${key}`);
+  if (e) e.textContent = "";
+}
+
+async function submitForm() {
+  const f = S.editing;
+  const name = ($("f-place").value || "").trim();
+  if (!name) return setErr("place", t("errName"), $("f-place"));
+  if (f.lat == null) return setErr("place", t("errCoord"), $("f-place"));
+  const fromRaw = $("f-from").value.trim(), from = parseDate(fromRaw);
+  if (!fromRaw) return setErr("from", t("errFrom"), $("f-from"));
+  if (!from) return setErr("from", t("errFromBad"), $("f-from"));
+  let to = "";
+  if (!f.now) {
+    const toRaw = $("f-to").value.trim();
+    // left empty: a same-day round trip
+    to = toRaw ? parseDate(toRaw) : from;
+    if (!to) return setErr("to", t("errToBad"), $("f-to"));
+    if (endDay(to) < startDay(from)) return setErr("to", t("errOrder"), $("f-to"));
+  }
+  // a city still sitting in the box counts too, if it is a listed one
+  const viaRaw = ($("f-via").value || "").trim();
+  if (viaRaw) {
+    const hit = GAZ.find(g => g.keys.includes(viaRaw.toLowerCase()));
+    if (!hit) return setErr("via", t("errVia", { q: viaRaw }), $("f-via"));
+    f.vias.push({ name: cityName(hit), lat: hit.lat, lon: hit.lon });
+  }
+  const doc = {
+    name, country: ($("f-country").value || "").trim(), lat: +f.lat, lon: +f.lon,
+    from, to, vias: f.vias.slice(0, 20), note: ($("f-note").value || "").trim(), updatedAt: new Date().toISOString(),
+  };
+  const id = f.id || `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  writeStop(id, doc);
+  S.editing = null;
+  S.cancelArmed = false;
+  S.selected = id;
+  S.focusNext = { stop: id, act: "go" };
+  toast(t("saved"));
+  rebuild();
+  if (reveal(S.stops.find(x => x.id === id))) renderPanel();
+  flyTo(doc.lon, doc.lat);
+}
+
+/* ---------- Storage: this browser only ---------- */
+const LS_KEY = "lifelines.stops.v1";
+const META_KEY = "lifelines.meta.v1";
+const EXAMPLES = () => [
+  ["杭州", "Hangzhou", "中国", 30.274, 120.155, "1998-03", "2010-07"],
+  ["北京", "Beijing", "中国", 39.904, 116.407, "2010-09", "2014-06"],
+  ["巴黎", "Paris", "法国", 48.857, 2.352, "2014-09", "2016-06"],
+  ["旧金山", "San Francisco", "美国", 37.775, -122.419, "2016-08", "2019-12"],
+  ["新加坡", "Singapore", "新加坡", 1.352, 103.82, "2020-01", "2022-03"],
+  ["东京", "Tokyo", "日本", 35.676, 139.65, "2022-04", ""],
+].map(([zh, en, country, lat, lon, from, to], i) =>
+  ({ id: `ex${i + 1}`, name: LANG === "en" ? en : zh, country: countryName(country), lat, lon, from, to, note: "", example: true }));
+
+function loadLocal() {
+  let v;
+  try { v = JSON.parse(localStorage.getItem(LS_KEY) || "[]"); } catch { return []; }
+  if (!Array.isArray(v)) return [];
+  // 北海道 used to sit in the middle of the island; it now sits on Sapporo
+  let moved = false;
+  for (const s of v) {
+    if (s && s.name === "北海道" && +s.lat === 43.45 && +s.lon === 142.85) { s.lat = 43.062; s.lon = 141.354; moved = true; }
+  }
+  if (moved) try { localStorage.setItem(LS_KEY, JSON.stringify(v)); } catch {}
+  return v;
+}
+function saveLocal() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(S.items)); }
+  catch { toast(t("noStorage")); }
+}
+// changes: edits to the user's own stops since the last export; drives the backup reminder in the footer.
+function loadMeta() {
+  try {
+    const v = JSON.parse(localStorage.getItem(META_KEY) || "{}");
+    return { changes: +v.changes || 0, lastExport: typeof v.lastExport === "string" ? v.lastExport : null };
+  } catch { return { changes: 0, lastExport: null }; }
+}
+let META = loadMeta();
+function saveMeta() { try { localStorage.setItem(META_KEY, JSON.stringify(META)); } catch {} }
+function noteChange() { META.changes++; saveMeta(); }
+
+// One level of undo for destructive actions; the toast carries the button.
+let undoSnap = null;
+function checkpoint() { undoSnap = { items: S.items.map(s => ({ ...s })), meta: { ...META } }; }
+function undo() {
+  if (!undoSnap) return;
+  S.items = undoSnap.items;
+  META = undoSnap.meta;
+  undoSnap = null;
+  saveLocal();
+  saveMeta();
+  rebuild();
+  toast(t("undone"));
+}
+
+function writeStop(id, doc) {
+  const i = S.items.findIndex(s => s.id === id);
+  if (i >= 0) S.items[i] = { id, ...doc }; else S.items.push({ id, ...doc });
+  saveLocal();
+  noteChange();
+}
+function deleteStop(id) {
+  const i = S.stops.findIndex(s => s.id === id);
+  if (i < 0) return;
+  const gone = S.stops[i];
+  const next = S.stops[i + 1] || S.stops[i - 1];
+  checkpoint();
+  if (S.selected === id) S.selected = null;
+  S.items = S.items.filter(s => s.id !== id);
+  saveLocal();
+  if (!gone.example) noteChange();
+  S.focusNext = next ? { stop: next.id, act: "go" } : { id: "btn-add" };
+  rebuild();
+  toast(t("deleted", { name: gone.name }), true);
+}
+function clearExamples() {
+  checkpoint();
+  S.items = S.items.filter(s => !s.example);
+  saveLocal();
+  S.focusNext = { id: "btn-add" };
+  rebuild();
+  toast(t("examplesCleared"), true);
+}
+function loadExamples() {
+  S.items = S.items.concat(EXAMPLES().filter(e => !S.items.some(s => s.id === e.id)));
+  saveLocal();
+  rebuild();
+  const last = S.stops[S.stops.length - 1];
+  if (last) flyTo(last.lon, last.lat);
+}
+
+function cleanStop(s) {
+  const lat = +s.lat, lon = +s.lon, from = parseDate(s.from), to = s.to ? parseDate(s.to) : "";
+  if (!s.name || !isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || !from || to === null) return null;
+  return {
+    id: /^[\w-]{1,40}$/.test(s.id || "") ? s.id : `s${Math.random().toString(36).slice(2, 10)}`,
+    name: String(s.name).slice(0, 60), country: String(s.country || "").slice(0, 60),
+    lat, lon, from, to,
+    vias: viasOf(s).filter(v => v && v.name && isFinite(+v.lat) && isFinite(+v.lon) && Math.abs(+v.lat) <= 90 && Math.abs(+v.lon) <= 180)
+      .slice(0, 20).map(v => ({ name: String(v.name).slice(0, 60), lat: +v.lat, lon: +v.lon })),
+    note: String(s.note || "").slice(0, 400), example: !!s.example,
+  };
+}
+function exportData() {
+  if (!S.items.length) { toast(t("nothingToExport")); return; }
+  const blob = new Blob([JSON.stringify({ app: "life-trajectory", version: 1, stops: S.items }, null, 2)], { type: "application/json" });
+  const name = `${t("fileName")}-${new Date().toISOString().slice(0, 10)}.json`;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  META.changes = 0;
+  META.lastExport = new Date().toISOString();
+  saveMeta();
+  renderFoot();
+  toast(t("exported", { name }));
+}
+async function importData(file) {
+  let list;
+  try {
+    const v = JSON.parse(await file.text());
+    list = Array.isArray(v) ? v : v.stops;
+    if (!Array.isArray(list)) throw 0;
+  } catch { toast(t("badFile")); return; }
+  const stops = list.map(cleanStop).filter(Boolean);
+  if (!stops.length) { toast(t("emptyFile")); return; }
+  if (S.editing) closeForm();
+  S.pendingImport = stops;
+  if (S.items.length) { S.focusNext = { id: "imp-export" }; renderPanel(); return; }
+  applyImport();
+}
+function applyImport() {
+  const stops = S.pendingImport;
+  if (!stops) return;
+  S.pendingImport = null;
+  const replaced = S.items.length > 0;
+  if (replaced) checkpoint();
+  S.items = stops;
+  S.selected = null;
+  saveLocal();
+  // what came from a file is already backed up by that file
+  META.changes = 0;
+  saveMeta();
+  S.focusNext = { id: "btn-import" };
+  rebuild();
+  toast(t("imported", { n: stops.length }), replaced);
+  const last = S.stops[S.stops.length - 1];
+  if (last) flyTo(last.lon, last.lat);
+}
+function cancelImport() {
+  S.pendingImport = null;
+  S.focusNext = { id: "btn-import" };
+  renderPanel();
+}
+function initStore() {
+  S.mode = "local";
+  S.canEdit = true;
+  S.items = loadLocal();
+  rebuild();
+}
+
+/* ---------- Layout ---------- */
+const isMobile = () => innerWidth <= 760;
+const PANEL_KEY = "lifelines.panel.v1";
+const panelHidden = () => !isMobile() && document.body.classList.contains("panel-hidden");
+function setPanel(open, focus, animate = true) {
+  document.body.classList.toggle("panel-hidden", !open);
+  $("panel").inert = !open;
+  $("btn-panel").setAttribute("aria-expanded", String(open));
+  syncSheetButton();
+  try { localStorage.setItem(PANEL_KEY, open ? "1" : "0"); } catch {}
+  layout(animate);
+  if (focus) (open ? $("btn-sheet") : $("btn-panel")).focus();
+}
+// the header button folds the sheet down on phones and slides the panel away on desktop
+function syncSheetButton() {
+  const b = $("btn-sheet");
+  if (isMobile()) {
+    const open = !$("panel").classList.contains("collapsed");
+    b.setAttribute("aria-label", t(open ? "collapseList" : "expandList"));
+    $("sheet-icon").setAttribute("d", open ? "M3 5l4 4 4-4" : "M3 9l4-4 4 4");
+  } else {
+    b.setAttribute("aria-label", t("collapseList"));
+    $("sheet-icon").setAttribute("d", "M5 3l4 4-4 4");
+  }
+}
+function setSheet(open) {
+  $("panel").classList.toggle("collapsed", !open);
+  document.body.classList.toggle("sheet-collapsed", !open);
+  $("btn-sheet").setAttribute("aria-expanded", open);
+  syncSheetButton();
+  layout();
+}
+// animate: glide the globe to its new centre (when the panel slides) instead of jumping
+function layout(animate) {
+  view.dpr = Math.min(2, devicePixelRatio || 1);
+  view.w = innerWidth; view.h = innerHeight;
+  canvas.width = Math.round(view.w * view.dpr);
+  canvas.height = Math.round(view.h * view.dpr);
+  if (isMobile()) {
+    const collapsed = $("panel").classList.contains("collapsed");
+    const sheet = collapsed ? 80 : view.h * 0.46 + 10;
+    const top = 70;
+    view.cx = view.w / 2;
+    view.cy = top + (view.h - sheet - top) / 2;
+    view.base = Math.min(view.w * 0.46, (view.h - sheet - top) * 0.47);
+  } else {
+    const panel = panelHidden() ? 0 : 372 + 32;
+    view.cxTo = (view.w - panel) / 2 + (panel ? 10 : 0);
+    view.baseTo = Math.min((view.w - panel) * 0.4, view.h * 0.39);
+    view.cy = view.h / 2;
+    if (animate !== true || reduced) { view.cx = view.cxTo; view.base = view.baseTo; }
+    return;
+  }
+  view.cxTo = view.cx; view.baseTo = view.base;
+}
+
+/* ---------- Camera ---------- */
+let cam = null;
+function center() { return [-view.rot[0], -view.rot[1]]; }
+function setCenter([lon, lat]) { view.rot[0] = -lon; view.rot[1] = clamp(-lat, -80, 80); }
+function flyTo(lon, lat, dur) {
+  const from = center(), to = [lon, lat];
+  const d = d3.geoDistance(from, to);
+  const ms = reduced ? 1 : (dur ?? clamp(500 + d * 700, 600, 1800));
+  const interp = d3.geoInterpolate(from, to);
+  S.idleUntil = performance.now() + ms + 6000;
+  return new Promise(res => { cam = { t0: performance.now(), ms, interp, res }; view.vel = [0, 0]; });
+}
+/* ---------- Rendering ---------- */
+let rotFn = d3.geoRotation([0, 0, 0]);
+function project(lon, lat, h) {
+  const [l, p] = rotFn([lon, lat]);
+  const lr = l / DEG, pr = p / DEG;
+  const x = Math.cos(pr) * Math.sin(lr), y = Math.sin(pr), z = Math.cos(pr) * Math.cos(lr);
+  const k = 1 + h, R = proj.scale();
+  return { x: view.cx + R * k * x, y: view.cy - R * k * y, hidden: z < 0 && (x * x + y * y) * k * k < 1, z };
+}
+
+function strokeRuns(pts, lw, alpha, which) {
+  ctx.lineWidth = lw;
+  ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+  ctx.beginPath();
+  let pen = false;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const want = which === "front" ? !p.hidden : p.hidden;
+    if (!want) { pen = false; continue; }
+    if (!pen) {
+      const prev = pts[i - 1];
+      if (prev) ctx.moveTo((prev.x + p.x) / 2, (prev.y + p.y) / 2), ctx.lineTo(p.x, p.y);
+      else ctx.moveTo(p.x, p.y);
+      pen = true;
+    } else ctx.lineTo(p.x, p.y);
+  }
+  ctx.stroke();
+}
+
+function drawArc(arc, t) {
+  const n = arc.pts.length - 1;
+  const pts = arc.pts.map(([lo, la, h]) => {
+    const p = project(lo, la, h);
+    p.hidden = p.z < 0;
+    return p;
+  });
+  ctx.setLineDash([2, 4]);
+  strokeRuns(pts, 0.8, arc.trip ? 0.08 : 0.13, "back");
+  ctx.setLineDash([]);
+  if (arc.trip) {
+    strokeRuns(pts, 5, 0.025, "front");
+    strokeRuns(pts, 2.2, 0.06, "front");
+    strokeRuns(pts, 0.8, 0.56, "front");
+  } else {
+    strokeRuns(pts, 9, 0.04, "front");
+    strokeRuns(pts, 3.6, 0.12, "front");
+    strokeRuns(pts, 1.1, 0.9, "front");
+  }
+
+  // the travelling light: a comet that runs along each arc
+  if (reduced) return;
+  const u = ((t / (2600 + arc.dist * 900)) + arc.seed) % 1.25;
+  if (u > 1) return;
+  const head = Math.round(u * n);
+  const tail = Math.max(0, head - Math.round(n * 0.22));
+  for (let j = tail; j < head; j++) {
+    const a = pts[j], b = pts[j + 1];
+    if (a.hidden || b.hidden) continue;
+    const k = (j - tail + 1) / (head - tail);
+    ctx.lineWidth = arc.trip ? 1.6 : 2.4;
+    ctx.strokeStyle = `rgba(255,255,255,${(arc.trip ? 0.6 : 0.9) * k * k})`;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  }
+  const hp = pts[head];
+  if (hp && !hp.hidden) glow(hp.x, hp.y, arc.trip ? 8 : 12, arc.trip ? 0.35 : 0.55), dot(hp.x, hp.y, arc.trip ? 1.3 : 1.8, 1);
+}
+
+function glow(x, y, r, a) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, `rgba(255,255,255,${a})`);
+  g.addColorStop(0.35, `rgba(255,255,255,${a * 0.28})`);
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+function dot(x, y, r, a) {
+  ctx.fillStyle = `rgba(255,255,255,${a})`;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+
+let screenPlaces = [];
+function draw(t) {
+  const { w, h, dpr, cx, cy } = view;
+  const R = view.base * view.zoom;
+  proj.rotate([view.rot[0], view.rot[1], 0]).scale(R).translate([cx, cy]);
+  back.rotate([view.rot[0] - 180, -view.rot[1], 0]).scale(R).translate([cx, cy]);
+  rotFn = d3.geoRotation([view.rot[0], view.rot[1], 0]);
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, w, h);
+
+  // atmosphere
+  const atm = ctx.createRadialGradient(cx, cy, R * 0.94, cx, cy, R * 1.32);
+  atm.addColorStop(0, "rgba(255,255,255,0.10)");
+  atm.addColorStop(0.18, "rgba(255,255,255,0.035)");
+  atm.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = atm;
+  ctx.beginPath(); ctx.arc(cx, cy, R * 1.32, 0, Math.PI * 2); ctx.fill();
+
+  // sphere body, lit from the upper left
+  const body = ctx.createRadialGradient(cx - R * 0.42, cy - R * 0.48, R * 0.05, cx, cy, R);
+  body.addColorStop(0, "#151515");
+  body.addColorStop(0.55, "#070707");
+  body.addColorStop(1, "#020202");
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+
+  // far side, seen through the glass
+  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = "rgba(255,255,255,0.055)";
+  ctx.beginPath(); backPath(mesh110); ctx.stroke();
+
+  // graticule
+  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = "rgba(255,255,255,0.05)";
+  ctx.beginPath(); path(graticule); ctx.stroke();
+
+  // province borders: faint, a little clearer as you zoom in
+  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = `rgba(255,255,255,${0.12 + 0.12 * clamp((view.zoom - 1) / 3, 0, 1)})`;
+  ctx.beginPath(); path(visibleProvinces([-view.rot[0], -view.rot[1]], R, view.w, view.h)); ctx.stroke();
+
+  // light-up mode: the provinces / states you have been to glow
+  if (S.light) {
+    const lit = S.lit || (S.lit = litRegions());
+    for (const r of lit) {
+      ctx.beginPath(); path(r.geo);
+      ctx.fillStyle = "rgba(255,255,255,0.3)"; ctx.fill();
+      ctx.lineWidth = 0.8; ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.stroke();
+    }
+  }
+
+  // country outlines
+  ctx.lineWidth = 0.75;
+  ctx.strokeStyle = "rgba(255,255,255,0.6)";
+  ctx.beginPath(); path(mesh50); ctx.stroke();
+
+  // rim
+  const rim = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+  rim.addColorStop(0, "rgba(255,255,255,0.34)");
+  rim.addColorStop(0.5, "rgba(255,255,255,0.10)");
+  rim.addColorStop(1, "rgba(255,255,255,0.18)");
+  const focused = document.activeElement === canvas && canvas.matches(":focus-visible");
+  ctx.lineWidth = focused ? 1.6 : 1;
+  ctx.strokeStyle = focused ? "rgba(255,255,255,0.7)" : rim;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+
+  // arcs and points: normal blending, so where many of them meet it gets a little brighter, not blown out
+  ctx.globalCompositeOperation = "source-over";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  if (!S.light) for (const arc of S.arcs) drawArc(arc, t);
+
+  // points
+  const selPlace = S.selected ? S.stops.find(s => s.id === S.selected) : null;
+  const hovStop = S.hoverId ? S.stops.find(s => s.id === S.hoverId) : null;
+  screenPlaces = [];
+  const labels = [];
+  // places that sit close together on screen share their glow, so a cluster is only a little brighter than one
+  const proj2 = S.places.map(pl => project(pl.lon, pl.lat, 0));
+  const crowd = proj2.map((p, i) => p.hidden ? 1 : proj2.reduce((n, q, j) => n + (j !== i && !q.hidden && Math.hypot(p.x - q.x, p.y - q.y) < 16 ? 1 : 0), 1));
+  for (const [i, pl] of S.places.entries()) {
+    const p = proj2[i];
+    const latest = pl.stops[pl.stops.length - 1].s;
+    const isNow = pl.stops.some(o => !o.s.to);
+    const isSel = (selPlace && placeKey(selPlace) === pl.key) || (hovStop && placeKey(hovStop) === pl.key) || S.hoverPlace === pl.key;
+    if (p.hidden) { dot(p.x, p.y, 1.3, 0.16); continue; }
+    const edge = clamp(p.z * 3, 0.25, 1);
+    glow(p.x, p.y, isSel ? 22 : 14, (isSel ? 0.6 : 0.38 / Math.sqrt(crowd[i])) * edge);
+    dot(p.x, p.y, isSel ? 3.2 : 2.5, edge);
+    if (isNow && !reduced) {
+      const ph = (t % 2400) / 2400;
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(255,255,255,${0.55 * (1 - ph) * edge})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 4 + ph * 16, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (isSel) {
+      ctx.lineWidth = 0.9;
+      ctx.strokeStyle = "rgba(255,255,255,0.75)";
+      ctx.beginPath(); ctx.arc(p.x, p.y, 8.5, 0, Math.PI * 2); ctx.stroke();
+    }
+    screenPlaces.push({ pl, x: p.x, y: p.y, latest });
+    labels.push({ x: p.x, y: p.y, text: latest.name, strong: isSel, z: p.z });
+  }
+  // cities passed through keep their mark and name in light-up mode too; only the lines go
+  for (const v of S.vias || []) {
+    const p = project(v.lon, v.lat, 0);
+    if (p.hidden) continue;
+    const edge = clamp(p.z * 3, 0.25, 1);
+    ctx.lineWidth = 1.1;
+    ctx.strokeStyle = `rgba(255,255,255,${0.75 * edge})`;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 2.6, 0, Math.PI * 2); ctx.stroke();
+    labels.push({ x: p.x, y: p.y, text: v.name, strong: false, z: p.z, via: true });
+  }
+
+  // labels, strongest first, skipping collisions
+  ctx.globalCompositeOperation = "source-over";
+  // places you stayed win over cities you only passed through when labels collide
+  labels.sort((a, b) => (b.strong - a.strong) || (!!a.via - !!b.via) || (b.z - a.z));
+  const placed = [];
+  for (const L of labels) {
+    ctx.font = `${L.strong ? 500 : 400} ${L.strong ? 13 : L.via ? 10.5 : 11.5}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif`;
+    const tw = ctx.measureText(L.text).width;
+    const box = { x: L.x + (L.strong ? 14 : L.via ? 7 : 9), y: L.y - 8, w: tw, h: 15 };
+    if (!L.strong && placed.some(b => box.x < b.x + b.w + 4 && box.x + box.w + 4 > b.x && box.y < b.y + b.h && box.y + box.h > b.y)) continue;
+    placed.push(box);
+    ctx.fillStyle = `rgba(243,242,238,${L.strong ? 0.96 : (L.via ? 0.42 : 0.62) * clamp(L.z * 3, 0.3, 1)})`;
+    ctx.fillText(L.text, box.x, L.y + 4);
+  }
+
+  // where the form's location will land
+  const f = S.editing;
+  if (f && f.lat != null) {
+    const p = project(f.lon, f.lat, 0);
+    if (!p.hidden) {
+      ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      dot(p.x, p.y, 2, 1);
+    }
+  }
+}
+
+/* ---------- Loop ---------- */
+let lastT = performance.now();
+let dragging = false;
+function frame(t) {
+  const dt = Math.min(64, t - lastT);
+  lastT = t;
+  if (view.cxTo != null && (Math.abs(view.cxTo - view.cx) > 0.3 || Math.abs(view.baseTo - view.base) > 0.3)) {
+    const k = 1 - Math.exp(-dt / 110);
+    view.cx += (view.cxTo - view.cx) * k;
+    view.base += (view.baseTo - view.base) * k;
+  }
+  if (cam) {
+    const e = clamp((t - cam.t0) / cam.ms, 0, 1);
+    setCenter(cam.interp(ease(e)));
+    if (e >= 1) { const r = cam.res; cam = null; r(); }
+  } else if (!dragging) {
+    if (Math.abs(view.vel[0]) > 0.001 || Math.abs(view.vel[1]) > 0.001) {
+      view.rot[0] += view.vel[0] * dt / 16;
+      view.rot[1] = clamp(view.rot[1] + view.vel[1] * dt / 16, -80, 80);
+      view.vel[0] *= 0.93; view.vel[1] *= 0.93;
+    } else if (S.spin && t > S.idleUntil && !S.editing) {
+      // slower when zoomed in, so the surface drifts past at about the same on-screen speed
+      view.rot[0] += 0.006 * dt / Math.max(1, view.zoom);
+    }
+  }
+  draw(t);
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Pointer input ---------- */
+const pointers = new Map();
+let downAt = null, pinch = null;
+function hit(x, y) {
+  let best = null, bd = 16;
+  for (const sp of screenPlaces) {
+    const d = Math.hypot(sp.x - x, sp.y - y);
+    if (d < bd) { bd = d; best = sp; }
+  }
+  return best;
+}
+canvas.addEventListener("pointerdown", e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1) {
+    downAt = { x: e.clientX, y: e.clientY, t: performance.now() };
+    dragging = true;
+    view.vel = [0, 0];
+    canvas.classList.add("dragging");
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: view.zoom };
+    downAt = null;
+  }
+  cam = null;
+  S.idleUntil = performance.now() + 5000;
+});
+canvas.addEventListener("pointermove", e => {
+  const prev = pointers.get(e.pointerId);
+  if (!prev) {
+    const h = hit(e.clientX, e.clientY);
+    canvas.classList.toggle("hovering", !!h && !S.picking);
+    S.hoverPlace = h ? h.pl.key : null;
+    const tip = $("tip");
+    if (h) {
+      $("t-name").textContent = h.latest.name;
+      $("t-when").textContent = h.pl.stops.map(o => fmtRange(o.s)).join("  ·  ");
+      tip.hidden = false;
+      const tx = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 10);
+      tip.style.transform = `translate(${tx}px, ${e.clientY + 14}px)`;
+    } else tip.hidden = true;
+    return;
+  }
+  const cur = { x: e.clientX, y: e.clientY };
+  pointers.set(e.pointerId, cur);
+  if (pointers.size === 2 && pinch) {
+    const [a, b] = [...pointers.values()];
+    view.zoom = clamp(pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, ZOOM_MIN, ZOOM_MAX);
+    return;
+  }
+  const R = view.base * view.zoom;
+  const k = DEG / R;
+  const dx = (cur.x - prev.x) * k, dy = (cur.y - prev.y) * k;
+  view.rot[0] += dx;
+  view.rot[1] = clamp(view.rot[1] - dy, -80, 80);
+  view.vel = [dx * 0.9, -dy * 0.9];
+});
+function endPointer(e) {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (pointers.size > 0) return;
+  dragging = false;
+  canvas.classList.remove("dragging");
+  if (downAt && e.type === "pointerup" && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 6) {
+    view.vel = [0, 0];
+    onTap(e.clientX, e.clientY);
+  }
+  downAt = null;
+  S.idleUntil = performance.now() + 5000;
+}
+canvas.addEventListener("pointerup", endPointer);
+canvas.addEventListener("pointercancel", endPointer);
+canvas.addEventListener("pointerleave", () => { if (!pointers.size) { $("tip").hidden = true; S.hoverPlace = null; } });
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  view.zoom = clamp(view.zoom * Math.exp(-e.deltaY * 0.0015), ZOOM_MIN, ZOOM_MAX);
+  S.idleUntil = performance.now() + 5000;
+}, { passive: false });
+
+function onTap(x, y) {
+  if (S.picking && S.editing) {
+    const ll = proj.invert([x, y]);
+    const R = view.base * view.zoom;
+    if (!ll || Math.hypot(x - view.cx, y - view.cy) > R) { toast(t("clickGlobe")); return; }
+    pickAt(ll[0], ll[1]);
+    return;
+  }
+  const h = hit(x, y);
+  if (h) {
+    if (isMobile()) setSheet(true);
+    selectStop(h.latest.id, true);
+  } else if (S.selected) {
+    S.selected = null;
+    renderPanel();
+  }
+}
+
+/* ---------- Controls ---------- */
+$("btn-lang").onclick = () => setLang(LANG === "zh" ? "en" : "zh");
+// every visit opens spinning, with the lines (not lit up)
+function setLight(on) {
+  S.light = on;
+  $("btn-light").setAttribute("aria-pressed", String(on));
+}
+$("btn-light").onclick = () => setLight(!S.light);
+setLight(false);
+try { localStorage.removeItem("lifelines.light.v1"); } catch {}
+applyLang();
+$("btn-spin").onclick = () => {
+  S.spin = !S.spin;
+  $("btn-spin").setAttribute("aria-pressed", S.spin);
+  S.idleUntil = 0;
+};
+$("btn-spin").setAttribute("aria-pressed", S.spin);
+canvas.addEventListener("keydown", e => {
+  const step = e.shiftKey ? 20 : 6;
+  const k = e.key;
+  if (k === "ArrowLeft" || k === "ArrowRight") view.rot[0] += k === "ArrowLeft" ? step : -step;
+  else if (k === "ArrowUp" || k === "ArrowDown") view.rot[1] = clamp(view.rot[1] + (k === "ArrowUp" ? -step : step), -80, 80);
+  else if (k === "+" || k === "=") view.zoom = clamp(view.zoom * 1.2, ZOOM_MIN, ZOOM_MAX);
+  else if (k === "-" || k === "_") view.zoom = clamp(view.zoom / 1.2, ZOOM_MIN, ZOOM_MAX);
+  else return;
+  e.preventDefault();
+  cam = null;
+  view.vel = [0, 0];
+  S.idleUntil = performance.now() + 5000;
+});
+$("btn-add").onclick = () => openForm(null);
+$("btn-export").onclick = exportData;
+$("btn-import").onclick = () => $("f-import").click();
+$("f-import").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (f) importData(f); };
+$("btn-sheet").onclick = e => isMobile() ? setSheet($("panel").classList.contains("collapsed")) : setPanel(false, e.detail === 0);
+$("btn-panel").onclick = e => setPanel(true, e.detail === 0);
+// desktop: come back the way it was left
+try { if (!isMobile() && localStorage.getItem(PANEL_KEY) === "0") setPanel(false, false, false); } catch {}
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (S.picking) { stopPicking(); if (S.editing) $("f-pick").focus(); }
+  else if (S.pendingImport) cancelImport();
+  else if (S.editing) requestCancel();
+});
+addEventListener("resize", () => { syncSheetButton(); layout(); });
+
+layout();
+renderStats();
+renderPanel();
+requestAnimationFrame(frame);
+initStore();
+{
+  const last = S.stops[S.stops.length - 1];
+  if (last) flyTo(last.lon, last.lat, 1600);
+}
+})();
+</script>
+</body>
+</html>
